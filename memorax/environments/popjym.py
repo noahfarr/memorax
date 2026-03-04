@@ -64,6 +64,15 @@ class PopJymWrapper(GymnaxWrapper):
         )
         return obs, new_state, reward, done, info
 
+    def observation_space(self, params):
+        return self._env.observation_space(params.env_params)
+
+    def action_space(self, params):
+        return self._env.action_space(params.env_params)
+
+    def state_space(self, params):
+        return self._env.state_space(params.env_params)
+
 
 def make(env_id, **kwargs):
     import popjym
