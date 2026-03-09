@@ -15,7 +15,6 @@ from memorax.networks.sequence_models.utils import (
 from memorax.utils import (
     Timestep,
     Transition,
-    memory_metrics,
     periodic_incremental_update,
 )
 from memorax.utils.typing import (
@@ -262,10 +261,6 @@ class DQN:
         )
 
         info = {"losses/loss": loss, "losses/q_value": q_value.mean()}
-
-        if experience.carry is not None:
-            initial_carry = jax.tree.map(lambda x: x[:, -1:], experience.carry)
-            info.update(memory_metrics(carry, initial_carry))
 
         buffer_state = state.buffer_state
 

@@ -13,7 +13,7 @@ from memorax.networks.sequence_models.utils import (
     remove_feature_axis,
     remove_time_axis,
 )
-from memorax.utils import Timestep, Transition, memory_metrics
+from memorax.utils import Timestep, Transition
 from memorax.utils.typing import Array, Discrete, Environment, EnvParams, EnvState, Key
 
 
@@ -671,10 +671,6 @@ class PPOC:
             termination_loss,
         ) = jax.tree.map(lambda x: jnp.expand_dims(x, axis=(0, 1)), metrics)
 
-        memory = jax.tree.map(
-            lambda x: jnp.expand_dims(x, axis=(0, 1)),
-            memory_metrics(state.actor_carry, initial_actor_carry),
-        )
         metadata = {
             **transitions.metadata,
             "losses/actor_loss": actor_loss,
@@ -685,7 +681,6 @@ class PPOC:
             "losses/option_entropy": option_entropy,
             "losses/option_loss": option_loss,
             "losses/termination_loss": termination_loss,
-            **memory,
         }
 
         return (

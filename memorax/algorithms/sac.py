@@ -15,7 +15,6 @@ from memorax.networks.sequence_models.utils import (
 from memorax.utils import (
     Timestep,
     Transition,
-    memory_metrics,
     periodic_incremental_update,
 )
 from memorax.utils.typing import (
@@ -541,10 +540,6 @@ class SAC:
         )
 
         info = {**critic_info, **actor_info, **alpha_info}
-
-        if experience.carry is not None:
-            initial_carry = jax.tree.map(lambda x: x[:, -1:], experience.carry)
-            info.update(memory_metrics(actor_carry, initial_carry))
 
         return state, info
 

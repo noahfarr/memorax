@@ -12,7 +12,7 @@ from memorax.networks.sequence_models.utils import (
     remove_feature_axis,
     remove_time_axis,
 )
-from memorax.utils import Timestep, Transition, memory_metrics
+from memorax.utils import Timestep, Transition
 from memorax.utils.typing import Array, Environment, EnvParams, EnvState, Key
 
 
@@ -314,10 +314,6 @@ class PQN:
             jax.tree.map(lambda x: jnp.expand_dims(x, axis=(0, 1)), metrics)
         )
         epsilon = jnp.expand_dims(self.epsilon_schedule(state.step), axis=(0, 1))
-        memory = jax.tree.map(
-            lambda x: jnp.expand_dims(x, axis=(0, 1)),
-            memory_metrics(state.carry, initial_carry),
-        )
         metadata = {
             **transitions.metadata,
             "losses/loss": loss,
@@ -328,7 +324,6 @@ class PQN:
             "losses/td_error": td_error,
             "losses/td_error_std": td_error_std,
             "losses/epsilon": epsilon,
-            **memory,
         }
 
         return (key, state), transitions.replace(
