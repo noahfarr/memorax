@@ -50,8 +50,7 @@ class FFN(nn.Module, Block):
         return None
 
 
-class GatedFFN(nn.Module, Block):
-    """Gated feed-forward network (SwiGLU-style): Dense -> split -> act(gate) * value -> Dense."""
+class GLU(nn.Module, Block):
 
     features: int
     expansion_factor: int = 4

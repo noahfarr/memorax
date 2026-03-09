@@ -1,7 +1,7 @@
 import memorax.networks.heads as heads
 from memorax.networks.blocks import (
     FFN,
-    GatedFFN,
+    GLU,
     GatedResidual,
     MoE,
     PostNorm,
