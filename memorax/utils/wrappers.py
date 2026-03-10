@@ -305,6 +305,64 @@ class ScaleRewardWrapper(GymnaxWrapper):
 
 
 @struct.dataclass
+class NormalizeRewardWrapperState:
+    mean: float
+    var: float
+    count: float
+    G: float
+    env_state: environment.EnvState
+
+
+class NormalizeRewardWrapper(GymnaxWrapper):
+    """Scales rewards by the running standard deviation of discounted returns.
+
+    Tracks G_t = R + gamma * G_{t-1} (reset at episode boundaries) and
+    maintains Welford running statistics over G_t values. Rewards are
+    divided by sqrt(var(G) + eps) before being returned.
+    """
+
+    def __init__(self, env, gamma: float = 0.99, eps: float = 1e-8):
+        super().__init__(env)
+        self.gamma = gamma
+        self.eps = eps
+
+    def reset(self, key, params=None):
+        obs, env_state = self._env.reset(key, params)
+        state = NormalizeRewardWrapperState(
+            mean=0.0,
+            var=1.0,
+            count=1e-4,
+            G=0.0,
+            env_state=env_state,
+        )
+        return obs, state
+
+    def step(self, key, state, action, params=None):
+        obs, env_state, reward, done, info = self._env.step(
+            key, state.env_state, action, params
+        )
+
+        G = reward + self.gamma * state.G * (1 - done)
+
+        count = state.count + 1
+        delta = G - state.mean
+        mean = state.mean + delta / count
+        delta2 = G - mean
+        var = (state.var * (state.count - 1) + delta * delta2) / (count - 1 + self.eps)
+
+        scaled_reward = reward / jnp.sqrt(var + self.eps)
+
+        new_state = NormalizeRewardWrapperState(
+            mean=mean,
+            var=var,
+            count=count,
+            G=G * (1 - done),
+            env_state=env_state,
+        )
+        return obs, new_state, scaled_reward, done, info
+
+
+@struct.dataclass
 class PufferLibEnvState:
     step: int = 0
 

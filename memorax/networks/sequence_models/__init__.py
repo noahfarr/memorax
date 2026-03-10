@@ -7,6 +7,7 @@ from .min_gru import MinGRUCell
 from .mlstm import mLSTMCell
 from .rnn import RNN
 from .rtrl import RTRL
+from .rtu import RTUCell
 from .s5 import S5Cell
 from .self_attention import SelfAttention
 from .sequence_model import SequenceModel

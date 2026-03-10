@@ -1,3 +1,4 @@
+from .ac_lambda import ACLambda, ACLambdaConfig, ACLambdaState
 from .dqn import DQN, DQNConfig, DQNState
 from .mappo import MAPPO, MAPPOConfig, MAPPOState
 from .ppo import PPO, PPOConfig, PPOState

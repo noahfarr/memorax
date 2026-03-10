@@ -1,4 +1,5 @@
 import memorax.networks.heads as heads
+import memorax.networks.initializers as initializers
 from memorax.networks.blocks import (
     FFN,
     GLU,
