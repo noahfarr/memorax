@@ -307,7 +307,7 @@ class ScaleRewardWrapper(GymnaxWrapper):
 @struct.dataclass
 class NormalizeRewardWrapperState:
     mean: float
-    var: float
+    M2: float
     count: float
     G: float
     env_state: environment.EnvState
@@ -330,8 +330,8 @@ class NormalizeRewardWrapper(GymnaxWrapper):
         obs, env_state = self._env.reset(key, params)
         state = NormalizeRewardWrapperState(
             mean=0.0,
-            var=1.0,
-            count=1e-4,
+            M2=0.0,
+            count=0.0,
             G=0.0,
             env_state=env_state,
         )
@@ -348,13 +348,14 @@ class NormalizeRewardWrapper(GymnaxWrapper):
         delta = G - state.mean
         mean = state.mean + delta / count
         delta2 = G - mean
-        var = (state.var * (state.count - 1) + delta * delta2) / (count - 1 + self.eps)
+        M2 = state.M2 + delta * delta2
+        var = M2 / count
 
         scaled_reward = reward / jnp.sqrt(var + self.eps)
 
         new_state = NormalizeRewardWrapperState(
             mean=mean,
-            var=var,
+            M2=M2,
             count=count,
             G=G * (1 - done),
             env_state=env_state,
