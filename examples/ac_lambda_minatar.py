@@ -10,7 +10,7 @@ from memorax.loggers import DashboardLogger, Logger
 from memorax.networks import FeatureExtractor, Network, heads, initializers
 from memorax.utils.wrappers import NormalizeObservationWrapper, NormalizeRewardWrapper
 
-total_timesteps = 500_000
+total_timesteps = 5_000_000
 num_train_steps = 10_000
 num_eval_steps = 10_000
 
@@ -34,7 +34,7 @@ cfg = ACLambdaConfig(
 feature_extractor = FeatureExtractor(
     observation_extractor=nn.Sequential(
         (
-            nn.Conv(features=16, kernel_size=(3, 3), strides=(1, 1), kernel_init=initializers.sparse_init()),
+            nn.Conv(features=16, kernel_size=(3, 3), strides=(1, 1), padding='VALID', kernel_init=initializers.sparse_init()),
             nn.LayerNorm(use_bias=False, use_scale=False),
             nn.leaky_relu,
             lambda x: x.reshape((x.shape[0], x.shape[1], -1)),
