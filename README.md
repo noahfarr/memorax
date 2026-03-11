@@ -176,6 +176,6 @@ If you use `Memorax` for your work, please cite:
 }
 ```
 
-<h2 align="center">🙏 Acknowledgments</h2>
+<h2> 🙏 Acknowledgments</h2>
 
 Special thanks to [@huterguier](https://github.com/huterguier) for the valuable discussions and advice on the API design.
