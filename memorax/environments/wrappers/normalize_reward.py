@@ -29,8 +29,8 @@ class NormalizeRewardWrapper(GymnaxWrapper):
         obs, env_state = self._env.reset(key, params)
         state = NormalizeRewardWrapperState(
             mean=0.0,
-            M2=0.0,
-            count=0.0,
+            M2=1.0,
+            count=1.0,
             G=0.0,
             env_state=env_state,
         )
@@ -54,9 +54,7 @@ class NormalizeRewardWrapper(GymnaxWrapper):
         mean = state.mean + delta / count
         delta2 = G - mean
         M2 = state.M2 + delta * delta2
-        var = M2 / count
-
-        scaled_reward = reward / jnp.sqrt(var + self.eps)
+        scaled_reward = reward / jnp.sqrt(M2 / count + self.eps)
 
         new_state = NormalizeRewardWrapperState(
             mean=mean,
