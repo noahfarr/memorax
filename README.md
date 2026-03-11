@@ -5,7 +5,7 @@
 
 <p align="center">
   <a href="https://pypi.org/project/memorax/"><img src="https://img.shields.io/pypi/v/memorax.svg" /></a>
-  <a href="https://www.python.org/downloads/"><img src="https://img.shields.io/badge/python-3.11+-blue.svg" /></a>
+  <a href="https://www.python.org/downloads/"><img src="https://img.shields.io/badge/python-3.12-blue.svg" /></a>
   <a href="https://opensource.org/licenses/Apache-2.0"><img src="https://img.shields.io/badge/License-Apache%202.0-blue.svg" /></a>
   <a href="https://memorax.readthedocs.io/"><img src="https://img.shields.io/readthedocs/memorax" /></a>
 </p>
@@ -16,10 +16,10 @@ Most JAX RL libraries treat memory as an afterthought, bolting an LSTM onto an e
 
 | | Details |
 |---|---|
-| 🤖 **Algorithms** | [DQN](https://arxiv.org/abs/1312.5602), [PPO](https://arxiv.org/abs/1707.06347), [SAC](https://arxiv.org/abs/1801.01290), [PQN](https://arxiv.org/abs/2407.04811v2#S4), [MAPPO](https://arxiv.org/abs/2103.01955), [R2D2](https://openreview.net/forum?id=r1lyTjAqYX) |
-| 🔁 **Sequence Models** | [LSTM](https://doi.org/10.1162/neco.1997.9.8.1735), [GRU](https://arxiv.org/abs/1406.1078), [xLSTM](https://arxiv.org/abs/2405.04517), [FFM](https://arxiv.org/abs/2310.04128), [SHM](https://arxiv.org/abs/2410.10132), [S5](https://arxiv.org/abs/2208.04933), [LRU](https://arxiv.org/abs/2303.06349), [Mamba](https://arxiv.org/abs/2312.00752), [MinGRU](https://arxiv.org/abs/2410.01201), [Self-Attention](https://arxiv.org/abs/1706.03762), [Linear Attention](https://arxiv.org/abs/2006.16236). Compose into `GTrXL`, `GPT-2`, and more. Support for [RTRL](https://doi.org/10.1162/neco.1989.1.2.270) |
+| 🤖 **Algorithms** | [DQN](https://arxiv.org/abs/1312.5602), [PPO](https://arxiv.org/abs/1707.06347), [SAC](https://arxiv.org/abs/1801.01290), [PQN](https://arxiv.org/abs/2407.04811v2#S4), [MAPPO](https://arxiv.org/abs/2103.01955), [R2D2](https://openreview.net/forum?id=r1lyTjAqYX), [AC(λ)](https://arxiv.org/abs/2410.14606), [PPOC](https://arxiv.org/abs/1712.00004) |
+| 🔁 **Sequence Models** | [LSTM](https://doi.org/10.1162/neco.1997.9.8.1735), [GRU](https://arxiv.org/abs/1406.1078), [xLSTM](https://arxiv.org/abs/2405.04517), [FFM](https://arxiv.org/abs/2310.04128), [SHM](https://arxiv.org/abs/2410.10132), [S5](https://arxiv.org/abs/2208.04933), [LRU](https://arxiv.org/abs/2303.06349), [Mamba](https://arxiv.org/abs/2312.00752), [MinGRU](https://arxiv.org/abs/2410.01201), [RTU](https://arxiv.org/abs/2409.01449), [Self-Attention](https://arxiv.org/abs/1706.03762), [Linear Attention](https://arxiv.org/abs/2006.16236). Compose into `GTrXL`, `GPT-2`, and more. Support for [RTRL](https://doi.org/10.1162/neco.1989.1.2.270) |
 | 🧬 **Networks** | [ViT](https://arxiv.org/abs/2010.11929) encoder. [RoPE](https://arxiv.org/abs/2104.09864) and [ALiBi](https://arxiv.org/abs/2108.12409) positional embeddings. [MoE](https://arxiv.org/abs/1701.06538) for horizontal scaling. [RL²](https://arxiv.org/abs/1611.02779) wrapper for meta-RL. [GVF/Horde](https://www.cs.swarthmore.edu/~meeden/DevelopmentalRobotics/horde1.pdf) heads. [C51](https://arxiv.org/abs/1707.06887) and [HL-Gauss](https://arxiv.org/abs/2403.03950) distributional value heads. Composable `feature extractor` → `torso` → `head` pipeline |
-| 🎮 **Environments** | [Gymnax](https://github.com/RobertTLange/gymnax), [PopJym](https://github.com/EdanToledo/popjym), [PopGym Arcade](https://github.com/bolt-research/popgym-arcade), [Navix](https://github.com/epignatelli/navix), [Craftax](https://github.com/MichaelTMatthews/Craftax), [Brax](https://github.com/google/brax), [MuJoCo](https://github.com/google-deepmind/mujoco_playground), [gxm](https://github.com/huterguier/gxm), [Grimax](https://github.com/noahfarr/grimax), [XMiniGrid](https://github.com/corl-team/xland-minigrid), [JaxMARL](https://github.com/FLAIROx/JaxMARL) |
+| 🎮 **Environments** | [Gymnax](https://github.com/RobertTLange/gymnax), [PopJym](https://github.com/EdanToledo/popjym), [PopGym Arcade](https://github.com/bolt-research/popgym-arcade), [Navix](https://github.com/epignatelli/navix), [Craftax](https://github.com/MichaelTMatthews/Craftax), [Brax](https://github.com/google/brax), [MuJoCo](https://github.com/google-deepmind/mujoco_playground), [gxm](https://github.com/huterguier/gxm), [Grimax](https://github.com/noahfarr/grimax), [POBAX](https://github.com/taodav/pobax), [XMiniGrid](https://github.com/corl-team/xland-minigrid), [JaxMARL](https://github.com/FLAIROx/JaxMARL) |
 | 📦 **Buffers** | Pure JAX episode replay with prioritized sampling via [Flashbax](https://github.com/instadeepai/flashbax) |
 | 📊 **Logging** | CLI Dashboard, File, [W&B](https://wandb.ai), [TensorboardX](https://github.com/lanpa/tensorboardX), [Neptune](https://neptune.ai) |
 
@@ -86,12 +86,13 @@ See `examples/` for complete scripts with logging and evaluation.
 `Memorax`'s real power is in its composable network primitives. Here's a `PPO` agent with a `GTrXL`-style architecture, built by snapping together modular blocks:
 
 ```python
+import flax.linen as nn
 import jax
 import optax
 from memorax.algorithms import PPO, PPOConfig
 from memorax.environments import environment
 from memorax.networks import (
-    MLP, FFN, ALiBi, FeatureExtractor, GatedResidual, Network,
+    FFN, ALiBi, FeatureExtractor, GatedResidual, Network,
     PreNorm, SegmentRecurrence, SelfAttention, Stack, heads,
 )
 
@@ -110,7 +111,7 @@ cfg = PPOConfig(
 )
 
 features, num_heads, num_layers = 64, 4, 2
-feature_extractor = FeatureExtractor(observation_extractor=MLP(features=(features,)))
+feature_extractor = FeatureExtractor(observation_extractor=nn.Sequential((nn.Dense(features), nn.relu)))
 attention = GatedResidual(PreNorm(SegmentRecurrence(
     SelfAttention(features, num_heads, context_length=128, positional_embedding=ALiBi(num_heads)),
     memory_length=64, features=features,
@@ -130,6 +131,7 @@ key, state, transitions = agent.train(key, state, num_steps=10_000)
 See `examples/architectures` for more architecture compositions including `xLSTM` and `GPT-2` style networks.
 
 <h2> 📂 Project Structure</h2>
+
 ```
 memorax/
 ├─ examples/          # Small runnable scripts (e.g., DQN CartPole)
@@ -138,6 +140,7 @@ memorax/
    ├─ networks/       # MLP, CNN, ViT, RNN, heads, ...
    ├─ environments/   # Gymnax / PopGym / Brax / ...
    ├─ buffers/        # Custom flashbax buffers
+   ├─ kernels/        # Custom Pallas kernels
    ├─ loggers/        # CLI, WandB, TensorBoardX integrations
    └─ utils/
 ```
