@@ -2,7 +2,7 @@ import jax
 import jax.numpy as jnp
 
 from memorax.kernels.pallas import linear_recurrence as _raw_linear_recurrence
-from memorax.networks.sequence_models.utils import broadcast_mask
+from memorax.utils.axes import broadcast_mask
 
 
 def _accumulate_decay(decay, init_decay, mask):

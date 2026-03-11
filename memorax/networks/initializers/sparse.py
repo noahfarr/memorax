@@ -4,7 +4,7 @@ import jax
 import jax.numpy as jnp
 
 
-def sparse_init(sparsity: float = 0.9):
+def sparse(sparsity: float = 0.9):
     """LeCun uniform initialization with sparse connectivity.
 
     For each output unit, zeros out `sparsity` fraction of input connections

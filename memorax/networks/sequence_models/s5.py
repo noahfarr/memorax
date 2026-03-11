@@ -8,16 +8,10 @@ from jax.nn.initializers import lecun_normal, normal
 
 from memorax.utils.typing import Array, Carry
 
+from memorax.networks.hippo import discretize_bilinear, discretize_zoh, make_dplr_hippo
+from memorax.networks.initializers import init_cv, init_v_inv_b, log_step, truncated_standard_normal
+
 from .memoroid import MemoroidCellBase
-from .utils import (
-    discretize_bilinear,
-    discretize_zoh,
-    init_cv,
-    init_log_steps,
-    init_v_inv_b,
-    make_dplr_hippo,
-    truncated_standard_normal,
-)
 
 
 def _c_init_complex_normal(key, shape):
@@ -93,7 +87,7 @@ class S5Cell(MemoroidCellBase):
 
         self.d = self.param("d", normal(stddev=1.0), (self.features,))
         self.log_step = self.param(
-            "log_step", init_log_steps, (self.state_size, self.dt_min, self.dt_max)
+            "log_step", log_step(self.dt_min, self.dt_max), (self.state_size,)
         )
 
     def _discretized_params(self):

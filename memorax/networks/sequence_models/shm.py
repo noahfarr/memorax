@@ -11,7 +11,7 @@ from jax import random
 
 from memorax.utils.typing import Array
 
-from .utils import xavier_uniform
+from memorax.networks.initializers import xavier_uniform
 
 
 class SHMCell(RNNCellBase):

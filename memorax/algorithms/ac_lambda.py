@@ -6,7 +6,7 @@ import jax
 import jax.numpy as jnp
 from flax import core, struct
 
-from memorax.networks.sequence_models.utils import (
+from memorax.utils.axes import (
     add_feature_axis,
     add_time_axis,
     remove_feature_axis,
@@ -260,7 +260,7 @@ class ACLambda:
             )
             log_p = remove_time_axis(dist.log_prob(add_time_axis(action)))
             entropy = remove_time_axis(dist.entropy())
-            return log_p + self.cfg.entropy_coefficient * entropy
+            return log_p + self.cfg.entropy_coefficient * jnp.sign(td_error) * entropy
 
         critic_grads = jax.jacobian(critic_loss_fn)(state.critic_params)
         actor_grads = jax.jacobian(actor_loss_fn)(state.actor_params)

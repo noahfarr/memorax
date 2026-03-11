@@ -4,7 +4,7 @@ import flax.linen as nn
 import jax
 import jax.numpy as jnp
 
-from memorax.networks.sequence_models.utils import get_input_shape
+from memorax.utils.axes import get_input_shape
 from memorax.utils.typing import Array, Carry
 
 from .base import Block

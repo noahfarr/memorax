@@ -12,7 +12,6 @@ from memorax.networks.blocks import (
     Stack,
     TopKRouter,
 )
-from memorax.networks.embedding import Embedding
 from memorax.networks.feature_extractor import FeatureExtractor
 from memorax.networks.identity import Identity
 from memorax.networks.network import Network

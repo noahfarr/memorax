@@ -11,14 +11,9 @@ from jax import random
 
 from memorax.utils.typing import Array
 
-from .utils import (
-    BlockDiagonalDense,
-    CausalConv1d,
-    MultiHeadLayerNorm,
-    add_time_axis,
-    powerlaw_init,
-    remove_time_axis,
-)
+from memorax.networks.layers import BlockDiagonalDense, CausalConv1d, MultiHeadLayerNorm
+from memorax.networks.initializers import powerlaw
+from memorax.utils.axes import add_time_axis, remove_time_axis
 
 
 class sLSTMCell(RNNCellBase):
@@ -106,7 +101,7 @@ class sLSTMCell(RNNCellBase):
         )
         self.f_bias = self.param(
             "f_bias",
-            powerlaw_init(self.num_heads, head_dim=head_dim),
+            powerlaw(self.num_heads, head_dim=head_dim),
             (self.hidden_dim,),
             self.param_dtype,
         )

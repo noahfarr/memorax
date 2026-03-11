@@ -1,5 +1,5 @@
 from functools import partial
-from typing import Optional, Tuple
+from typing import Literal, Optional, Tuple
 
 import jax
 import jax.numpy as jnp
@@ -8,12 +8,72 @@ from flax import struct
 from flax.typing import Dtype, Initializer
 
 from memorax.networks.positional_embeddings import RelativePositionalEmbedding
-from memorax.networks.sequence_models.utils import (
-    get_attention_implementation,
-    get_attention_mask,
-    get_input_shape,
-)
+from memorax.utils.axes import get_input_shape
 from memorax.utils.typing import Array
+
+Implementation = Literal["xla", "cudnn"]
+
+
+def get_attention_implementation() -> tuple[Implementation, jnp.dtype]:
+    backend = jax.default_backend()
+    if backend == "gpu":
+        try:
+            if any(
+                "nvidia" in device.device_kind.lower() for device in jax.local_devices()
+            ):
+                return "cudnn", jnp.bfloat16
+        except Exception:
+            pass
+    return "xla", jnp.float32
+
+
+def get_attention_mask(mask, initial_carry, memory_mask, context_length, num_heads):
+    """Compute attention mask with position information for positional embeddings.
+
+    Returns:
+        Tuple of (combined_mask, query_input, key_input) where:
+            - combined_mask: combined attention and causal mask (B, NH, T, S)
+            - query_input: query positions (B, T)
+            - key_input: key positions (B, M + context_length)
+    """
+    B, T = mask.shape
+    _, M, *_ = memory_mask.shape
+
+    query_mask = (
+        jnp.cumsum(mask.astype(jnp.int32), axis=1)
+        + jnp.max(
+            jnp.cumsum(
+                jnp.concatenate([memory_mask, initial_carry.mask], axis=1), axis=1
+            ),
+            axis=1,
+        )[..., None]
+    )
+
+    key_mask = jnp.concatenate(
+        [memory_mask, initial_carry.mask, mask], axis=1, dtype=jnp.int32
+    )
+    key_mask = jnp.cumsum(key_mask, axis=1)
+    key_mask = key_mask[:, -(M + context_length) :]
+
+    attention_mask = nn.make_attention_mask(query_mask, key_mask, pairwise_fn=jnp.equal)
+
+    query_input = jnp.arange(T) + M + context_length
+    query_input = jnp.broadcast_to(query_input, (B, T))
+    key_input = jnp.arange(M + context_length + T)
+    key_input = jnp.broadcast_to(key_input, (B, M + context_length + T))
+    key_input = key_input[:, -(M + context_length) :]
+    causal_mask = nn.make_attention_mask(
+        query_input, key_input, pairwise_fn=jnp.greater_equal
+    )
+
+    B, _, T, S = attention_mask.shape
+    attention_mask = jnp.broadcast_to(attention_mask, (B, num_heads, T, S))
+
+    B, _, T, S = causal_mask.shape
+    causal_mask = jnp.broadcast_to(causal_mask, (B, num_heads, T, S))
+
+    combined_mask = nn.combine_masks(attention_mask, causal_mask, dtype=jnp.bool)
+    return combined_mask, query_input, key_input
 
 from .sequence_model import SequenceModel
 

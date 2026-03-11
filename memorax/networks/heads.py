@@ -6,7 +6,7 @@ import jax
 import jax.numpy as jnp
 from flax.linen.initializers import constant
 
-from memorax.networks.sequence_models.utils import add_feature_axis, remove_feature_axis
+from memorax.utils.axes import add_feature_axis, remove_feature_axis
 
 
 class DiscreteQNetwork(nn.Module):

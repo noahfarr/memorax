@@ -6,7 +6,7 @@ from flax import linen as nn
 from memorax.utils.typing import Array, Carry
 
 from .sequence_model import SequenceModel
-from .utils import get_input_shape
+from memorax.utils.axes import get_input_shape
 
 
 class RTRL(SequenceModel):

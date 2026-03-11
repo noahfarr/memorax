@@ -9,7 +9,7 @@ from flax.typing import InOutScanAxis
 from memorax.utils.typing import Array, Carry
 
 from .sequence_model import SequenceModel
-from .utils import get_time_axis_and_input_shape, mask_carry
+from memorax.utils.axes import get_time_axis_and_input_shape, mask_carry
 
 
 class RNN(SequenceModel):

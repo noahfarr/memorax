@@ -8,7 +8,7 @@ import optax
 from flax import core, struct
 
 from memorax.buffers import compute_importance_weights
-from memorax.networks.sequence_models.utils import (
+from memorax.utils.axes import (
     add_feature_axis,
     remove_feature_axis,
     remove_time_axis,

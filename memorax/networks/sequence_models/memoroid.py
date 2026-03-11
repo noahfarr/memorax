@@ -10,7 +10,7 @@ from memorax.kernels.pallas import linear_recurrence as _raw_linear_recurrence
 from memorax.utils.typing import Array, Carry
 
 from .sequence_model import SequenceModel
-from .utils import broadcast_mask, get_input_shape
+from memorax.utils.axes import broadcast_mask, get_input_shape
 
 
 def _get_nested_param(params, name):

@@ -6,7 +6,7 @@ from flax import linen as nn
 from flax import struct
 
 from memorax.networks.sequence_models.sequence_model import SequenceModel
-from memorax.networks.sequence_models.utils import get_input_shape
+from memorax.utils.axes import get_input_shape
 from memorax.utils.typing import Array, Carry
 
 from .base import Block

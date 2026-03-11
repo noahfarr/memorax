@@ -8,6 +8,7 @@ from memorax.algorithms import ACLambda, ACLambdaConfig
 from memorax.environments import environment
 from memorax.loggers import DashboardLogger, Logger
 from memorax.networks import FeatureExtractor, Network, heads, initializers
+from memorax.networks.layers import Flatten
 from memorax.environments.wrappers import NormalizeObservationWrapper, NormalizeRewardWrapper
 
 seed = 0
@@ -16,6 +17,10 @@ num_seeds = 5
 env, env_params = environment.make("gymnax::Breakout-MinAtar")
 env = NormalizeObservationWrapper(env)
 env = NormalizeRewardWrapper(env, gamma=0.99)
+
+total_timesteps = 10_000_000
+num_train_steps = 100_000
+num_eval_steps = env_params.max_steps_in_episode
 
 cfg = ACLambdaConfig(
     num_envs=1,
@@ -30,14 +35,17 @@ cfg = ACLambdaConfig(
 feature_extractor = FeatureExtractor(
     observation_extractor=nn.Sequential(
         (
-            nn.Conv(features=16, kernel_size=(3, 3), strides=(1, 1), padding='VALID', kernel_init=initializers.sparse_init()),
+            nn.Conv(
+                features=16,
+                kernel_size=(3, 3),
+                strides=(1, 1),
+                padding="VALID",
+                kernel_init=initializers.sparse(),
+            ),
             nn.LayerNorm(use_bias=False, use_scale=False),
             nn.leaky_relu,
-            lambda x: x.reshape((x.shape[0], x.shape[1], -1)),
-            nn.Dense(1024, kernel_init=initializers.sparse_init()),
-            nn.LayerNorm(use_bias=False, use_scale=False),
-            nn.leaky_relu,
-            nn.Dense(128, kernel_init=initializers.sparse_init()),
+            Flatten(start_dim=2),
+            nn.Dense(128, kernel_init=initializers.sparse()),
             nn.LayerNorm(use_bias=False, use_scale=False),
             nn.leaky_relu,
         )
@@ -48,13 +56,13 @@ actor_network = Network(
     feature_extractor=feature_extractor,
     head=heads.Categorical(
         action_dim=env.action_space(env_params).n,
-        kernel_init=initializers.sparse_init(),
+        kernel_init=initializers.sparse(),
     ),
 )
 critic_network = Network(
     feature_extractor=feature_extractor,
     head=heads.VNetwork(
-        kernel_init=initializers.sparse_init(),
+        kernel_init=initializers.sparse(),
     ),
 )
 
@@ -70,7 +78,13 @@ agent = ACLambda(
 )
 
 logger = Logger(
-    [DashboardLogger(title="AC(λ) MinAtar Breakout", total_timesteps=total_timesteps)]
+    [
+        DashboardLogger(
+            title="AC(λ) MinAtar Breakout",
+            total_timesteps=total_timesteps,
+            env_id="MinAtar Breakout",
+        )
+    ]
 )
 logger_state = logger.init(cfg=asdict(cfg))
 

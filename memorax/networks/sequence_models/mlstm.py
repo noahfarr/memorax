@@ -24,7 +24,8 @@ from flax.typing import Dtype
 from memorax.utils.typing import Array, Carry
 
 from .memoroid import MemoroidCellBase
-from .utils import BlockDiagonalDense, MultiHeadLayerNorm, wang_init
+from memorax.networks.initializers import wang
+from memorax.networks.layers import BlockDiagonalDense, MultiHeadLayerNorm
 
 
 class mLSTMCell(MemoroidCellBase):
@@ -137,7 +138,7 @@ class mLSTMCell(MemoroidCellBase):
         self.output_projection = nn.Dense(
             self.features,
             use_bias=False,
-            kernel_init=wang_init(self.hidden_dim, num_blocks=1),
+            kernel_init=wang(self.hidden_dim, num_blocks=1),
             dtype=self.dtype,
             param_dtype=self.param_dtype,
         )
