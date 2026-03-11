@@ -142,7 +142,7 @@ memorax/
    └─ utils/
 ```
 
-<h2 🧩 JAX POMDP Ecosystem</h2>
+<h2> 🧩 JAX POMDP Ecosystem</h2>
 
 `Memorax` is designed to work alongside a growing suite of JAX-native tools focused on partial observability and memory. These projects provide the foundational architectures and benchmarks for modern memory-augmented RL:
 
