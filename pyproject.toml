@@ -19,6 +19,7 @@ keywords = ["jax", "flax", "reinforcement-learning", "memory", "rnn", "ssm", "tr
 dependencies = [
     "jax>=0.7.2",
     "flax>=0.10.7",
+    "lox",
     "distrax>=0.1.5",
     "flashbax>=0.1.3",
     "gymnax>=0.0.9",
@@ -91,3 +92,4 @@ gxm     = { git = "https://github.com/huterguier/gxm", rev = "dev", extra = "gxm
 pobax   = { git = "https://github.com/taodav/pobax" }
 popjym  = { git = "https://github.com/EdanToledo/popjym.git", extra = "popjym" }
 performax = { git = "https://github.com/noahfarr/performax.git" }
+lox       = { git = "https://github.com/huterguier/lox", rev = "dev" }
