@@ -77,10 +77,15 @@ for i in range(num_epochs):
 
     SPS = int(num_steps / (end - start))
 
-    print(logs.keys())
+    info = logs.pop("info")
+    episode_returns = info["returned_episode_returns"][info["returned_episode"]]
+    episode_lengths = info["returned_episode_lengths"][info["returned_episode"]]
+
     data = {
         "training/SPS": SPS,
-        **{f"training/{k}": v for k, v in logs["info"].items()},
+        "training/episode_returns": episode_returns,
+        "training/episode_lengths": episode_lengths,
+        **logs,
     }
     logger_state = logger.log(logger_state, data, step=state.step[0].item())
     logger.emit(logger_state)
