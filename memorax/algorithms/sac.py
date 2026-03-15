@@ -7,16 +7,8 @@ import jax.numpy as jnp
 import optax
 from flax import core, struct
 
-from memorax.utils.axes import (
-    add_feature_axis,
-    remove_feature_axis,
-    remove_time_axis,
-)
-from memorax.utils import (
-    Timestep,
-    Transition,
-    periodic_incremental_update,
-)
+from memorax.utils import Timestep, Transition, periodic_incremental_update
+from memorax.utils.axes import add_feature_axis, remove_feature_axis, remove_time_axis
 from memorax.utils.typing import (
     Array,
     Buffer,
@@ -31,17 +23,10 @@ from memorax.utils.typing import (
 @struct.dataclass(frozen=True)
 class SACConfig:
     num_envs: int
-    actor_lr: float
-    critic_lr: float
-    alpha_lr: float
-    buffer_size: int
     tau: float
     train_frequency: int
     target_update_frequency: int
-    batch_size: int
-    initial_alpha: float
     target_entropy_scale: float
-    max_grad_norm: float
     gradient_steps: int = 1
     burn_in_length: int = 0
 
@@ -125,7 +110,6 @@ class SAC:
         _,
         *,
         policy: Callable,
-        write_to_buffer: bool = True,
     ):
         key, state = carry
         initial_carry = state.actor_carry
@@ -174,10 +158,8 @@ class SAC:
             carry=initial_carry,
         )
 
-        buffer_state = state.buffer_state
-        if write_to_buffer:
-            transition = jax.tree.map(lambda x: jnp.expand_dims(x, 1), transition)
-            buffer_state = self.buffer.add(buffer_state, transition)
+        buffer_transition = jax.tree.map(lambda x: jnp.expand_dims(x, 1), transition)
+        buffer_state = self.buffer.add(state.buffer_state, buffer_transition)
 
         state = state.replace(
             step=state.step + self.cfg.num_envs,
@@ -432,8 +414,12 @@ class SAC:
             )
             q1, q2 = qs
             critic_loss = (
-                self.critic_network.head.loss(q1, {}, target_q, transitions=experience).mean()
-                + self.critic_network.head.loss(q2, {}, target_q, transitions=experience).mean()
+                self.critic_network.head.loss(
+                    q1, {}, target_q, transitions=experience
+                ).mean()
+                + self.critic_network.head.loss(
+                    q2, {}, target_q, transitions=experience
+                ).mean()
             )
 
             return critic_loss, {
@@ -622,7 +608,6 @@ class SAC:
             partial(
                 self._step,
                 policy=self._deterministic_action,
-                write_to_buffer=False,
             ),
             (key, state),
             length=num_steps,

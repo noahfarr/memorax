@@ -4,18 +4,16 @@ from typing import Any, Callable
 import flax.linen as nn
 import jax
 import jax.numpy as jnp
+import lox
 import optax
 from flax import core, struct
 
+from memorax.utils import Timestep, Transition, periodic_incremental_update
 from memorax.utils.axes import (
     add_feature_axis,
+    add_time_axis,
     remove_feature_axis,
     remove_time_axis,
-)
-from memorax.utils import (
-    Timestep,
-    Transition,
-    periodic_incremental_update,
 )
 from memorax.utils.typing import (
     Array,
@@ -31,13 +29,8 @@ from memorax.utils.typing import (
 @struct.dataclass(frozen=True)
 class DQNConfig:
     num_envs: int
-    buffer_size: int
     tau: float
     target_update_frequency: int
-    batch_size: int
-    start_e: float
-    end_e: float
-    exploration_fraction: float
     train_frequency: int
     burn_in_length: int = 0
 
@@ -109,7 +102,7 @@ class DQN:
         )
         return key, state, action, intermediates
 
-    def _step(self, carry, _, *, policy: Callable, write_to_buffer: bool = True):
+    def _step(self, carry, _, *, policy: Callable):
         key, state = carry
 
         initial_carry = state.carry
@@ -126,37 +119,35 @@ class DQN:
             lambda x: jnp.mean(x, axis=(1, 2)),
             intermediates.get("intermediates", {}),
         )
-
-        prev_action = jnp.where(
-            state.timestep.done,
-            jnp.zeros_like(state.timestep.action),
-            state.timestep.action,
-        )
-        prev_reward = jnp.where(state.timestep.done, 0, state.timestep.reward)
+        lox.log({"intermediates": intermediates, "info": info})
 
         first = Timestep(
             obs=state.timestep.obs,
-            action=prev_action,
-            reward=prev_reward,
+            action=jnp.where(
+                state.timestep.done,
+                jnp.zeros_like(state.timestep.action),
+                state.timestep.action,
+            ),
+            reward=jnp.where(
+                state.timestep.done,
+                jnp.zeros_like(state.timestep.reward),
+                state.timestep.reward,
+            ),
             done=state.timestep.done,
-        )
+        ).to_sequence()
         second = Timestep(
             obs=next_obs,
             action=action,
             reward=reward,
             done=done,
-        )
+        ).to_sequence()
         transition = Transition(
             first=first,
             second=second,
-            metadata={**info, "intermediates": intermediates},
-            carry=initial_carry,
+            carry=jax.tree.map(add_time_axis, initial_carry),
         )
 
-        buffer_state = state.buffer_state
-        if write_to_buffer:
-            transition = jax.tree.map(lambda x: jnp.expand_dims(x, 1), transition)
-            buffer_state = self.buffer.add(state.buffer_state, transition)
+        buffer_state = self.buffer.add(state.buffer_state, transition)
 
         state = state.replace(
             step=state.step + self.cfg.num_envs,
@@ -242,7 +233,9 @@ class DQN:
             q_value = jnp.take_along_axis(q_values, action, axis=-1)
             q_value = remove_feature_axis(q_value)
             td_error = q_value - td_target
-            loss = self.q_network.head.loss(q_value, aux, td_target, transitions=experience).mean()
+            loss = self.q_network.head.loss(
+                q_value, aux, td_target, transitions=experience
+            ).mean()
             return loss, (q_value, td_error, carry)
 
         (loss, (q_value, td_error, carry)), grads = jax.value_and_grad(
@@ -260,40 +253,28 @@ class DQN:
             self.cfg.tau,
         )
 
-        info = {"losses/loss": loss, "losses/q_value": q_value.mean()}
-
-        buffer_state = state.buffer_state
+        lox.log({"losses/loss": loss, "losses/q_value": q_value.mean()})
 
         state = state.replace(
             params=params,
             target_params=target_params,
             optimizer_state=optimizer_state,
-            buffer_state=buffer_state,
         )
 
-        return state, info
+        return state
 
     def _update_step(self, carry, _):
         key, state = carry
-        (key, state), transitions = jax.lax.scan(
+        (key, state), _ = jax.lax.scan(
             partial(self._step, policy=self._epsilon_greedy_action),
             (key, state),
             length=self.cfg.train_frequency // self.cfg.num_envs,
         )
 
         key, update_key = jax.random.split(key)
-        state, info = self._update(update_key, state)
+        state = self._update(update_key, state)
 
-        metadata = {
-            **transitions.metadata,
-            **jax.tree.map(lambda x: jnp.expand_dims(x, axis=(0, 1)), info),
-        }
-
-        return (key, state), transitions.replace(
-            first=transitions.first.replace(obs=None),
-            second=transitions.second.replace(obs=None),
-            metadata=metadata,
-        )
+        return (key, state), None
 
     @partial(jax.jit, static_argnames=["self"])
     def init(self, key):
@@ -309,15 +290,12 @@ class DQN:
         )
         reward = jnp.zeros((self.cfg.num_envs,), dtype=jnp.float32)
         done = jnp.ones((self.cfg.num_envs,), dtype=jnp.bool_)
-        *_, info = jax.vmap(self.env.step, in_axes=(0, 0, 0, None))(
-            env_keys, env_state, action, self.env_params
-        )
         carry = self.q_network.initialize_carry(obs.shape)
 
         timestep = Timestep(
             obs=obs, action=action, reward=reward, done=done
         ).to_sequence()
-        params = self.q_network.init(
+        params = target_params = self.q_network.init(
             {"params": q_key, "memory": memory_key},
             observation=timestep.obs,
             mask=timestep.done,
@@ -326,30 +304,12 @@ class DQN:
             done=timestep.done,
             initial_carry=carry,
         )
-        target_params = params
         optimizer_state = self.optimizer.init(params)
 
-        _, intermediates = self.q_network.apply(
-            params,
-            observation=timestep.obs,
-            mask=timestep.done,
-            action=timestep.action,
-            reward=add_feature_axis(timestep.reward),
-            done=timestep.done,
-            initial_carry=carry,
-            rngs={"memory": memory_key},
-            mutable=["intermediates"],
-        )
-        intermediates = jax.tree.map(
-            lambda x: jnp.mean(x, axis=(1, 2)),
-            intermediates.get("intermediates", {}),
-        )
-
-        dummy_timestep = Timestep(obs=obs, action=action, reward=reward, done=done)
+        timestep = timestep.from_sequence()
         transition = Transition(
-            first=dummy_timestep,
-            second=dummy_timestep,
-            metadata={**info, "intermediates": intermediates},
+            first=timestep,
+            second=timestep,
             carry=carry,
         )
         buffer_state = self.buffer.init(jax.tree.map(lambda x: x[0], transition))
@@ -358,7 +318,7 @@ class DQN:
             key,
             DQNState(
                 step=0,
-                timestep=timestep.from_sequence(),
+                timestep=timestep,
                 carry=carry,
                 env_state=env_state,
                 params=params,
@@ -384,17 +344,13 @@ class DQN:
         state: DQNState,
         num_steps: int,
     ):
-        (key, state), transitions = jax.lax.scan(
+        (key, state), _ = jax.lax.scan(
             self._update_step,
             (key, state),
             length=(num_steps // self.cfg.train_frequency),
         )
 
-        transitions = jax.tree.map(
-            lambda x: x.reshape((-1,) + x.shape[2:]), transitions
-        )
-
-        return key, state, transitions
+        return key, state
 
     @partial(jax.jit, static_argnames=["self", "num_steps"])
     def evaluate(self, key: Key, state: DQNState, num_steps: int):
@@ -413,13 +369,10 @@ class DQN:
         carry = self.q_network.initialize_carry(obs.shape)
 
         state = state.replace(timestep=timestep, carry=carry, env_state=env_state)
-        (key, _), transitions = jax.lax.scan(
-            partial(self._step, policy=self._greedy_action, write_to_buffer=False),
+        (key, _), _ = jax.lax.scan(
+            partial(self._step, policy=self._greedy_action),
             (key, state),
             length=num_steps,
         )
 
-        return key, transitions.replace(
-            first=transitions.first.replace(obs=None),
-            second=transitions.second.replace(obs=None),
-        )
+        return key

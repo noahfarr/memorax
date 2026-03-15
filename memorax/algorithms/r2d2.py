@@ -8,16 +8,8 @@ import optax
 from flax import core, struct
 
 from memorax.buffers import compute_importance_weights
-from memorax.utils.axes import (
-    add_feature_axis,
-    remove_feature_axis,
-    remove_time_axis,
-)
-from memorax.utils import (
-    Timestep,
-    Transition,
-    periodic_incremental_update,
-)
+from memorax.utils import Timestep, Transition, periodic_incremental_update
+from memorax.utils.axes import add_feature_axis, remove_feature_axis, remove_time_axis
 from memorax.utils.typing import (
     Array,
     Buffer,
@@ -32,20 +24,14 @@ from memorax.utils.typing import (
 @struct.dataclass(frozen=True)
 class R2D2Config:
     num_envs: int
-    buffer_size: int
     tau: float
     target_update_frequency: int
-    batch_size: int
-    start_e: float
-    end_e: float
-    exploration_fraction: float
     train_frequency: int
     burn_in_length: int = 10
     sequence_length: int = 80
     n_step: int = 5
     priority_exponent: float = 0.9
     importance_sampling_exponent: float = 0.6
-    double: bool = True
 
 
 @struct.dataclass(frozen=True)
@@ -149,7 +135,7 @@ class R2D2:
         )
         return key, state, action, intermediates
 
-    def _step(self, carry, _, *, policy: Callable, write_to_buffer: bool = True):
+    def _step(self, carry, _, *, policy: Callable):
         key, state = carry
 
         initial_carry = state.carry
@@ -167,17 +153,18 @@ class R2D2:
             intermediates.get("intermediates", {}),
         )
 
-        prev_action = jnp.where(
-            state.timestep.done,
-            jnp.zeros_like(state.timestep.action),
-            state.timestep.action,
-        )
-        prev_reward = jnp.where(state.timestep.done, 0, state.timestep.reward)
-
         first = Timestep(
             obs=state.timestep.obs,
-            action=prev_action,
-            reward=prev_reward,
+            action=jnp.where(
+                state.timestep.done,
+                jnp.zeros_like(state.timestep.action),
+                state.timestep.action,
+            ),
+            reward=jnp.where(
+                state.timestep.done,
+                0,
+                state.timestep.reward,
+            ),
             done=state.timestep.done,
         )
         second = Timestep(
@@ -193,10 +180,8 @@ class R2D2:
             carry=initial_carry,
         )
 
-        buffer_state = state.buffer_state
-        if write_to_buffer:
-            transition = jax.tree.map(lambda x: jnp.expand_dims(x, 1), transition)
-            buffer_state = self.buffer.add(state.buffer_state, transition)
+        buffer_transition = jax.tree.map(lambda x: jnp.expand_dims(x, 1), transition)
+        buffer_state = self.buffer.add(state.buffer_state, buffer_transition)
 
         state = state.replace(
             step=state.step + self.cfg.num_envs,
@@ -264,24 +249,7 @@ class R2D2:
             rngs={"memory": next_memory_key},
         )
 
-        if self.cfg.double:
-            _, (online_next_q_values, _) = self.q_network.apply(
-                state.params,
-                observation=experience.second.obs,
-                mask=experience.second.done,
-                action=experience.second.action,
-                reward=add_feature_axis(experience.second.reward),
-                done=experience.second.done,
-                initial_carry=initial_carry,
-                rngs={"memory": memory_key},
-            )
-            next_actions = jnp.argmax(online_next_q_values, axis=-1)
-            next_target_q_value = jnp.take_along_axis(
-                next_target_q_values, add_feature_axis(next_actions), axis=-1
-            )
-            next_target_q_value = remove_feature_axis(next_target_q_value)
-        else:
-            next_target_q_value = jnp.max(next_target_q_values, axis=-1)
+        next_target_q_value = jnp.max(next_target_q_values, axis=-1)
 
         _, sequence_length = experience.second.reward.shape
         if self.cfg.n_step > 1 and sequence_length >= self.cfg.n_step:
@@ -328,7 +296,9 @@ class R2D2:
 
             loss = (
                 importance_weights
-                * self.q_network.head.loss(q_value, aux, td_target, transitions=experience)
+                * self.q_network.head.loss(
+                    q_value, aux, td_target, transitions=experience
+                )
             ).mean()
             return loss, (q_value, td_error, carry)
 
@@ -513,7 +483,7 @@ class R2D2:
         state = state.replace(timestep=timestep, carry=carry, env_state=env_state)
 
         (key, _), transitions = jax.lax.scan(
-            partial(self._step, policy=self._greedy_action, write_to_buffer=False),
+            partial(self._step, policy=self._greedy_action),
             (key, state),
             length=num_steps,
         )

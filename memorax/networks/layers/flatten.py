@@ -1,6 +1,7 @@
+from math import prod
+
 import jax.numpy as jnp
 from flax import linen as nn
-from math import prod
 
 
 class Flatten(nn.Module):

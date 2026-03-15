@@ -10,7 +10,6 @@ from flax import core, struct
 
 from memorax.utils.axes import (
     add_feature_axis,
-    remove_feature_axis,
     remove_time_axis,
 )
 from memorax.utils import Timestep, Transition
@@ -175,9 +174,7 @@ class PPOC:
             initial_carry=state.critic_carry,
             rngs={"memory": critic_memory_key},
         )
-        # q_values: (B, 1, O, 1) -> (B, O)
         q_values = remove_time_axis(q_values)
-        q_values = remove_feature_axis(q_values)
         value = q_values[batch_idx, current_option]
 
         state = state.replace(
@@ -430,8 +427,6 @@ class PPOC:
                 initial_carry=initial_critic_carry,
                 rngs={"memory": memory_key, "dropout": dropout_key},
             )
-            # values: (B, T, O, 1) -> (B, T, O) -> index by option -> (B, T)
-            values = remove_feature_axis(values)
             options = transitions.metadata["option"]
             batch_size, time_steps = options.shape
             batch_idx = jnp.arange(batch_size)[:, None]
@@ -599,9 +594,7 @@ class PPOC:
             done=timestep.done,
             initial_carry=state.critic_carry,
         )
-        # bootstrap_q: (B, 1, O, 1) -> (B, O)
         bootstrap_q = remove_time_axis(bootstrap_q)
-        bootstrap_q = remove_feature_axis(bootstrap_q)
         value = bootstrap_q[jnp.arange(bootstrap_q.shape[0]), state.current_option]
 
         _, advantages = jax.lax.scan(

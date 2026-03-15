@@ -159,6 +159,7 @@ class MAPPO:
             action = jax.vmap(remove_time_axis)(sampled_action)
             log_prob = jax.vmap(remove_time_axis)(log_prob)
             value = remove_time_axis(value)
+            value = remove_feature_axis(value)
             value = value.T
         else:
             critic_carry, (value, _) = self.critic_network.apply(
@@ -383,6 +384,7 @@ class MAPPO:
                     initial_carry=initial_critic_carry,
                     rngs={"memory": memory_key, "dropout": dropout_key},
                 )
+                values = remove_feature_axis(values)
 
                 critic_loss = self.critic_network.head.loss(
                     values, aux, returns_transformed, transitions=transitions
@@ -609,6 +611,7 @@ class MAPPO:
                 initial_carry=state.critic_carry,
             )
             value = remove_time_axis(value)
+            value = remove_feature_axis(value)
             value = value.T
         else:
             _, (value, _) = self.critic_network.apply(
