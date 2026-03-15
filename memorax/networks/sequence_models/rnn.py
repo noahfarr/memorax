@@ -48,16 +48,11 @@ class RNNCellBase(FlaxRNNCellBase):
 
 class RNN(SequenceModel):
     cell: nn.RNNCellBase
-    features: Optional[int] = None
     unroll: int = 1
     variable_axes: Mapping[CollectionFilter, InOutScanAxis] = FrozenDict()
     variable_broadcast: CollectionFilter = "params"
     variable_carry: CollectionFilter = False
     split_rngs: Mapping[PRNGSequenceFilter, bool] = FrozenDict({"params": False})
-
-    def setup(self):
-        if self.features is not None:
-            self.output_projection = nn.Dense(self.features)
 
     def __call__(
         self,
@@ -92,9 +87,6 @@ class RNN(SequenceModel):
         )
 
         carry, outputs = scan(self.cell, carry, inputs, mask)
-
-        if self.features is not None:
-            outputs = self.output_projection(outputs)
 
         return carry, outputs
 
@@ -143,9 +135,6 @@ class RNN(SequenceModel):
         (next_carry, next_sensitivity), outputs = scan(
             self.cell, (carry, sensitivity), inputs, mask
         )
-
-        if self.features is not None:
-            outputs = self.output_projection(outputs)
 
         return next_carry, outputs, next_sensitivity
 
