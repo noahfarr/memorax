@@ -4,6 +4,7 @@ from typing import Any, Callable, Optional
 import flax.linen as nn
 import jax
 import jax.numpy as jnp
+import lox
 import optax
 from flax import core, struct
 
@@ -175,13 +176,13 @@ class GradientPPO:
             reward=reward,
             done=done,
         )
+        lox.log({"info": info, "intermediates": intermediates})
+
         transition = Transition(
             first=first,
             second=second,
-            metadata={**info, "intermediates": intermediates},
-            log_prob=log_prob,
-            value=value,
             carry=step_carry,
+            aux={"log_prob": log_prob, "value": value},
         )
 
         state = state.replace(
@@ -233,8 +234,8 @@ class GradientPPO:
             )
             log_probs = probs.log_prob(transitions.second.action)
             entropy = probs.entropy().mean()
-            ratio = jnp.exp(log_probs - transitions.log_prob)
-            approximate_kl = jnp.mean(transitions.log_prob - log_probs)
+            ratio = jnp.exp(log_probs - transitions.aux["log_prob"])
+            approximate_kl = jnp.mean(transitions.aux["log_prob"] - log_probs)
             clip_fraction = jnp.mean(
                 (jnp.abs(ratio - 1.0) > self.cfg.clip_coefficient).astype(jnp.float32)
             )
@@ -540,31 +541,16 @@ class GradientPPO:
             ),
         )
 
-        transitions = jax.tree.map(
-            lambda x: x.reshape(self.cfg.num_envs, -1, *x.shape[3:]),
-            transitions,
-        )
-
-        actor_loss, critic_loss, entropy, approximate_kl, clip_fraction = jax.tree.map(
-            lambda x: jnp.expand_dims(x, axis=(0, 1)), metrics
-        )
-        metadata = {
-            **transitions.metadata,
+        actor_loss, critic_loss, entropy, approximate_kl, clip_fraction = metrics
+        lox.log({
             "losses/actor_loss": actor_loss,
             "losses/critic_loss": critic_loss,
             "losses/entropy": entropy,
             "losses/approximate_kl": approximate_kl,
             "losses/clip_fraction": clip_fraction,
-        }
+        })
 
-        return (
-            key,
-            state,
-        ), transitions.replace(
-            first=transitions.first.replace(obs=None),
-            second=transitions.second.replace(obs=None),
-            metadata=metadata,
-        )
+        return (key, state), None
 
     @partial(jax.jit, static_argnames=["self"])
     def init(self, key):
@@ -669,18 +655,13 @@ class GradientPPO:
 
     @partial(jax.jit, static_argnames=["self", "num_steps"])
     def train(self, key: Key, state: GradientPPOState, num_steps: int):
-        (key, state), transitions = jax.lax.scan(
+        (key, state), _ = jax.lax.scan(
             self._update_step,
             (key, state),
             length=num_steps // (self.cfg.num_envs * self.cfg.num_steps),
         )
 
-        transitions = jax.tree.map(
-            lambda x: (y := x.swapaxes(1, 2)).reshape((-1,) + y.shape[2:]),
-            transitions,
-        )
-
-        return key, state, transitions
+        return key, state
 
     @partial(jax.jit, static_argnames=["self", "num_steps", "deterministic"])
     def evaluate(

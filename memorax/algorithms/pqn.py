@@ -4,6 +4,7 @@ from typing import Any, Callable
 import flax.linen as nn
 import jax
 import jax.numpy as jnp
+import lox
 import optax
 from flax import core, struct
 
@@ -128,11 +129,12 @@ class PQN:
             reward=reward,
             done=done,
         )
+        lox.log({"info": info, "intermediates": intermediates})
+
         transition = Transition(
             first=first,
             second=second,
-            metadata={**info, "intermediates": intermediates},
-            value=q_values,
+            aux={"q_values": q_values},
         )
 
         state = state.replace(
@@ -160,7 +162,7 @@ class PQN:
             1.0 - transition.second.done
         ) * lambda_return + transition.second.done * transition.second.reward
 
-        q_value = jnp.max(transition.value, axis=-1)
+        q_value = jnp.max(transition.aux["q_values"], axis=-1)
         return (lambda_return, q_value), lambda_return
 
     def _update_epoch(self, carry, _):
@@ -311,11 +313,9 @@ class PQN:
         )
 
         loss, q_value, q_value_min, q_value_max, q_value_std, td_error, td_error_std = (
-            jax.tree.map(lambda x: jnp.expand_dims(x, axis=(0, 1)), metrics)
+            metrics
         )
-        epsilon = jnp.expand_dims(self.epsilon_schedule(state.step), axis=(0, 1))
-        metadata = {
-            **transitions.metadata,
+        lox.log({
             "losses/loss": loss,
             "losses/q_value": q_value,
             "losses/q_value_min": q_value_min,
@@ -323,14 +323,10 @@ class PQN:
             "losses/q_value_std": q_value_std,
             "losses/td_error": td_error,
             "losses/td_error_std": td_error_std,
-            "losses/epsilon": epsilon,
-        }
+            "losses/epsilon": self.epsilon_schedule(state.step),
+        })
 
-        return (key, state), transitions.replace(
-            first=transitions.first.replace(obs=None),
-            second=transitions.second.replace(obs=None),
-            metadata=metadata,
-        )
+        return (key, state), None
 
     @partial(jax.jit, static_argnames=["self"])
     def init(self, key) -> tuple[Key, PQNState]:
@@ -384,18 +380,14 @@ class PQN:
         key: Key,
         state: PQNState,
         num_steps: int,
-    ) -> tuple[Key, PQNState, dict]:
-        (key, state), transitions = jax.lax.scan(
+    ):
+        (key, state), _ = jax.lax.scan(
             self._update_step,
             (key, state),
             length=(num_steps // (self.cfg.num_steps * self.cfg.num_envs)),
         )
-        transitions = jax.tree.map(
-            lambda x: (y := x.swapaxes(1, 2)).reshape((-1,) + y.shape[2:]),
-            transitions,
-        )
 
-        return key, state, transitions
+        return key, state
 
     @partial(jax.jit, static_argnames=["self", "num_steps"])
     def evaluate(self, key: Key, state: PQNState, num_steps: int):

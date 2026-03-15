@@ -4,6 +4,7 @@ from typing import Any, Callable, Optional
 import flax.linen as nn
 import jax
 import jax.numpy as jnp
+import lox
 import optax
 from flax import core, struct
 
@@ -185,7 +186,7 @@ class MAPPO:
         advantage, next_value = carry
         delta = (
             self.critic_network.head.get_target(transition, next_value)
-            - transition.value
+            - transition.aux["value"]
         )
         advantage = (
             delta
@@ -194,7 +195,7 @@ class MAPPO:
             * (1 - transition.second.done)
             * advantage
         )
-        return (advantage, transition.value), advantage
+        return (advantage, transition.aux["value"]), advantage
 
     def _step(self, carry: tuple, _, *, policy: Callable):
         key, state = carry
@@ -234,12 +235,12 @@ class MAPPO:
             reward=reward,
             done=done,
         )
+        lox.log({"info": info, "intermediates": intermediates})
+
         transition = Transition(
             first=first,
             second=second,
-            metadata={**info, "intermediates": intermediates},
-            log_prob=log_prob,
-            value=value,
+            aux={"log_prob": log_prob, "value": value},
         )
 
         state = state.replace(
@@ -293,8 +294,8 @@ class MAPPO:
 
             log_probs = probs.log_prob(transitions.second.action)
             entropy = probs.entropy().mean()
-            ratio = jnp.exp(log_probs - transitions.log_prob)
-            approximate_kl = jnp.mean(transitions.log_prob - log_probs)
+            ratio = jnp.exp(log_probs - transitions.aux["log_prob"])
+            approximate_kl = jnp.mean(transitions.aux["log_prob"] - log_probs)
             clip_fraction = jnp.mean(
                 (jnp.abs(ratio - 1.0) > self.cfg.clip_coefficient).astype(jnp.float32)
             )
@@ -390,7 +391,7 @@ class MAPPO:
                     values, aux, returns_transformed, transitions=transitions
                 )
                 if self.cfg.clip_value_loss:
-                    old_values = jnp.moveaxis(transitions.value, 0, -1)
+                    old_values = jnp.moveaxis(transitions.aux["value"], 0, -1)
                     clipped_value = old_values + jnp.clip(
                         (values - old_values),
                         -self.cfg.clip_coefficient,
@@ -442,8 +443,8 @@ class MAPPO:
                     values, aux, returns, transitions=transitions
                 )
                 if self.cfg.clip_value_loss:
-                    clipped_value = transitions.value + jnp.clip(
-                        (values - transitions.value),
+                    clipped_value = transitions.aux["value"] + jnp.clip(
+                        (values - transitions.aux["value"]),
                         -self.cfg.clip_coefficient,
                         self.cfg.clip_coefficient,
                     )
@@ -633,7 +634,7 @@ class MAPPO:
             reverse=True,
             unroll=16,
         )
-        returns = advantages + transitions.value
+        returns = advantages + transitions.aux["value"]
 
         transitions = jax.tree.map(
             lambda x: jnp.moveaxis(x, 0, min(2, x.ndim - 1)), transitions
@@ -667,23 +668,16 @@ class MAPPO:
             ),
         )
 
-        actor_loss, critic_loss, entropy, approximate_kl, clip_fraction = jax.tree.map(
-            lambda x: jnp.expand_dims(x, axis=(0, 1, 2)), metrics
-        )
-        metadata = {
-            **transitions.metadata,
+        actor_loss, critic_loss, entropy, approximate_kl, clip_fraction = metrics
+        lox.log({
             "losses/actor_loss": actor_loss,
             "losses/critic_loss": critic_loss,
             "losses/entropy": entropy,
             "losses/approximate_kl": approximate_kl,
             "losses/clip_fraction": clip_fraction,
-        }
+        })
 
-        return (key, state), transitions.replace(
-            first=transitions.first.replace(obs=None),
-            second=transitions.second.replace(obs=None),
-            metadata=metadata,
-        )
+        return (key, state), None
 
     @partial(jax.jit, static_argnames=["self"])
     def init(self, key):
@@ -794,18 +788,13 @@ class MAPPO:
 
     @partial(jax.jit, static_argnames=["self", "num_steps"])
     def train(self, key: Key, state: MAPPOState, num_steps: int):
-        (key, state), transitions = jax.lax.scan(
+        (key, state), _ = jax.lax.scan(
             self._update_step,
             (key, state),
             length=num_steps // (self.cfg.num_envs * self.cfg.num_steps),
         )
-        transitions = jax.tree.map(
-            lambda x: jnp.moveaxis(x, 3, 1).reshape(
-                -1, x.shape[1], x.shape[2], *x.shape[4:]
-            ),
-            transitions,
-        )
-        return key, state, transitions
+
+        return key, state
 
     @partial(jax.jit, static_argnames=["self", "num_steps", "deterministic"])
     def evaluate(self, key: Key, state: MAPPOState, num_steps: int, deterministic=True):

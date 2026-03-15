@@ -4,6 +4,7 @@ from typing import Any, Callable
 import flax.linen as nn
 import jax
 import jax.numpy as jnp
+import lox
 import optax
 from flax import core, struct
 
@@ -173,10 +174,11 @@ class R2D2:
             reward=reward,
             done=done,
         )
+        lox.log({"info": info, "intermediates": intermediates})
+
         transition = Transition(
             first=first,
             second=second,
-            metadata={**info, "intermediates": intermediates},
             carry=initial_carry,
         )
 
@@ -350,16 +352,9 @@ class R2D2:
         key, update_key = jax.random.split(key)
         state, info = self._update(update_key, state)
 
-        metadata = {
-            **transitions.metadata,
-            **jax.tree.map(lambda x: jnp.expand_dims(x, axis=(0, 1)), info),
-        }
+        lox.log(info)
 
-        return (key, state), transitions.replace(
-            first=transitions.first.replace(obs=None),
-            second=transitions.second.replace(obs=None),
-            metadata=metadata,
-        )
+        return (key, state), None
 
     @partial(jax.jit, static_argnames=["self"])
     def init(self, key):
@@ -375,9 +370,6 @@ class R2D2:
         )
         reward = jnp.zeros((self.cfg.num_envs,), dtype=jnp.float32)
         done = jnp.ones((self.cfg.num_envs,), dtype=jnp.bool_)
-        *_, info = jax.vmap(self.env.step, in_axes=(0, 0, 0, None))(
-            env_keys, env_state, action, self.env_params
-        )
         carry = self.q_network.initialize_carry(obs.shape)
 
         timestep = Timestep(
@@ -395,27 +387,10 @@ class R2D2:
         target_params = params
         optimizer_state = self.optimizer.init(params)
 
-        _, intermediates = self.q_network.apply(
-            params,
-            observation=timestep.obs,
-            mask=timestep.done,
-            action=timestep.action,
-            reward=add_feature_axis(timestep.reward),
-            done=timestep.done,
-            initial_carry=carry,
-            rngs={"memory": memory_key},
-            mutable=["intermediates"],
-        )
-        intermediates = jax.tree.map(
-            lambda x: jnp.mean(x, axis=(1, 2)),
-            intermediates.get("intermediates", {}),
-        )
-
         dummy_timestep = Timestep(obs=obs, action=action, reward=reward, done=done)
         transition = Transition(
             first=dummy_timestep,
             second=dummy_timestep,
-            metadata={**info, "intermediates": intermediates},
             carry=carry,
         )
         buffer_state = self.buffer.init(jax.tree.map(lambda x: x[0], transition))
@@ -452,17 +427,13 @@ class R2D2:
         state: R2D2State,
         num_steps: int,
     ):
-        (key, state), transitions = jax.lax.scan(
+        (key, state), _ = jax.lax.scan(
             self._update_step,
             (key, state),
             length=(num_steps // self.cfg.train_frequency),
         )
 
-        transitions = jax.tree.map(
-            lambda x: x.reshape((-1,) + x.shape[2:]), transitions
-        )
-
-        return key, state, transitions
+        return key, state
 
     @partial(jax.jit, static_argnames=["self", "num_steps"])
     def evaluate(self, key: Key, state: R2D2State, num_steps: int):

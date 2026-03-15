@@ -4,6 +4,7 @@ from typing import Any, Callable
 import flax.linen as nn
 import jax
 import jax.numpy as jnp
+import lox
 from flax import core, struct
 
 from memorax.utils.axes import (
@@ -139,12 +140,12 @@ class ACLambda:
             done=state.timestep.done,
         )
         second = Timestep(obs=None, action=action, reward=reward, done=done)
+        lox.log({"info": info, "intermediates": intermediates})
+
         transition = Transition(
             first=first,
             second=second,
-            log_prob=log_prob,
-            value=value,
-            metadata={**info, "intermediates": intermediates},
+            aux={"log_prob": log_prob, "value": value},
         )
         state = state.replace(
             step=state.step + self.cfg.num_envs,
@@ -298,18 +299,12 @@ class ACLambda:
             done=state.timestep.done,
         )
         second = Timestep(obs=None, action=action, reward=reward, done=done)
-        transition = Transition(
-            first=first,
-            second=second,
-            log_prob=log_prob,
-            value=value,
-            metadata={
-                **info,
-                "intermediates": intermediates,
-                "losses/td_error": td_error.mean(),
-                "losses/value": value.mean(),
-            },
-        )
+        lox.log({
+            "info": info,
+            "intermediates": intermediates,
+            "losses/td_error": td_error.mean(),
+            "losses/value": value.mean(),
+        })
 
         state = state.replace(
             step=state.step + self.cfg.num_envs,
@@ -328,7 +323,7 @@ class ACLambda:
             critic_carry=critic_carry,
         )
 
-        return (key, state), transition
+        return (key, state), None
 
     @partial(jax.jit, static_argnames=["self"])
     def init(self, key: Key):
@@ -413,12 +408,12 @@ class ACLambda:
 
     @partial(jax.jit, static_argnames=["self", "num_steps"])
     def train(self, key: Key, state: ACLambdaState, num_steps: int):
-        (key, state), transitions = jax.lax.scan(
+        (key, state), _ = jax.lax.scan(
             self._update_step,
             (key, state),
             length=num_steps // self.cfg.num_envs,
         )
-        return key, state, transitions
+        return key, state
 
     @partial(jax.jit, static_argnames=["self", "num_steps", "deterministic"])
     def evaluate(self, key: Key, state: ACLambdaState, num_steps: int, deterministic: bool = True):
