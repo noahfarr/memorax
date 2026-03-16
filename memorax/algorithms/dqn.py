@@ -60,7 +60,7 @@ class DQN:
     def _greedy_action(
         self, key: Key, state: DQNState
     ) -> tuple[Key, DQNState, Array, dict]:
-        key, memory_key = jax.random.split(key)
+        key, torso_key = jax.random.split(key)
         timestep = state.timestep.to_sequence()
         (carry, (q_values, _)), intermediates = self.q_network.apply(
             state.params,
@@ -70,7 +70,7 @@ class DQN:
             reward=add_feature_axis(timestep.reward),
             done=timestep.done,
             initial_carry=state.carry,
-            rngs={"memory": memory_key},
+            rngs={"torso": torso_key},
             mutable=["intermediates"],
         )
         action = jnp.argmax(q_values, axis=-1)
@@ -165,7 +165,7 @@ class DQN:
     def _update(self, key: Key, state: DQNState):
         batch = self.buffer.sample(state.buffer_state, key)
 
-        key, memory_key, next_memory_key = jax.random.split(key, 3)
+        key, torso_key, next_torso_key = jax.random.split(key, 3)
 
         experience = batch.experience
         experience = jax.tree.map(lambda x: jnp.expand_dims(x, 1), experience)
@@ -212,7 +212,7 @@ class DQN:
             reward=add_feature_axis(experience.second.reward),
             done=experience.second.done,
             initial_carry=initial_target_carry,
-            rngs={"memory": next_memory_key},
+            rngs={"torso": next_torso_key},
         )
         next_target_q_value = jnp.max(next_target_q_values, axis=-1)
 
@@ -227,7 +227,7 @@ class DQN:
                 reward=add_feature_axis(experience.first.reward),
                 done=experience.first.done,
                 initial_carry=initial_carry,
-                rngs={"memory": memory_key},
+                rngs={"torso": torso_key},
             )
             action = add_feature_axis(experience.second.action)
             q_value = jnp.take_along_axis(q_values, action, axis=-1)
@@ -278,7 +278,7 @@ class DQN:
 
     @partial(jax.jit, static_argnames=["self"])
     def init(self, key):
-        key, env_key, q_key, memory_key = jax.random.split(key, 4)
+        key, env_key, q_key, torso_key = jax.random.split(key, 4)
         env_keys = jax.random.split(env_key, self.cfg.num_envs)
 
         obs, env_state = jax.vmap(self.env.reset, in_axes=(0, None))(
@@ -290,13 +290,13 @@ class DQN:
         )
         reward = jnp.zeros((self.cfg.num_envs,), dtype=jnp.float32)
         done = jnp.ones((self.cfg.num_envs,), dtype=jnp.bool_)
-        carry = self.q_network.initialize_carry(obs.shape)
+        carry = self.q_network.initialize_carry((self.cfg.num_envs, None))
 
         timestep = Timestep(
             obs=obs, action=action, reward=reward, done=done
         ).to_sequence()
         params = target_params = self.q_network.init(
-            {"params": q_key, "memory": memory_key},
+            {"params": q_key, "torso": torso_key},
             observation=timestep.obs,
             mask=timestep.done,
             action=timestep.action,
@@ -366,7 +366,7 @@ class DQN:
         reward = jnp.zeros((self.cfg.num_envs,), dtype=jnp.float32)
         done = jnp.ones((self.cfg.num_envs,), dtype=jnp.bool_)
         timestep = Timestep(obs=obs, action=action, reward=reward, done=done)
-        carry = self.q_network.initialize_carry(obs.shape)
+        carry = self.q_network.initialize_carry((self.cfg.num_envs, None))
 
         state = state.replace(timestep=timestep, carry=carry, env_state=env_state)
         (key, _), _ = jax.lax.scan(

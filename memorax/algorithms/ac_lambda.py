@@ -77,7 +77,7 @@ class ACLambda:
     def _stochastic_action(
         self, key: Key, state: ACLambdaState
     ) -> tuple[Key, ACLambdaState, Array, Array, Array, dict]:
-        key, action_key, actor_memory_key, critic_memory_key = jax.random.split(key, 4)
+        key, action_key, actor_torso_key, critic_torso_key = jax.random.split(key, 4)
         timestep = state.timestep.to_sequence()
 
         (actor_carry, (probs, _)), intermediates = self.actor_network.apply(
@@ -88,7 +88,7 @@ class ACLambda:
             reward=add_feature_axis(timestep.reward),
             done=timestep.done,
             initial_carry=state.actor_carry,
-            rngs={"memory": actor_memory_key},
+            rngs={"torso": actor_torso_key},
             mutable=["intermediates"],
         )
         action, log_prob = probs.sample_and_log_prob(seed=action_key)
@@ -101,7 +101,7 @@ class ACLambda:
             reward=add_feature_axis(timestep.reward),
             done=timestep.done,
             initial_carry=state.critic_carry,
-            rngs={"memory": critic_memory_key},
+            rngs={"torso": critic_torso_key},
         )
         action = remove_time_axis(action)
         log_prob = remove_time_axis(log_prob)
@@ -178,7 +178,7 @@ class ACLambda:
     def _update_step(self, carry: tuple, _):
         key, state = carry
 
-        key, action_key, step_key, actor_memory_key, critic_memory_key = jax.random.split(key, 5)
+        key, action_key, step_key, actor_torso_key, critic_torso_key = jax.random.split(key, 5)
 
         timestep = state.timestep.to_sequence()
 
@@ -190,7 +190,7 @@ class ACLambda:
             reward=add_feature_axis(timestep.reward),
             done=timestep.done,
             initial_carry=state.actor_carry,
-            rngs={"memory": actor_memory_key},
+            rngs={"torso": actor_torso_key},
             mutable=["intermediates"],
         )
         action, log_prob = probs.sample_and_log_prob(seed=action_key)
@@ -205,7 +205,7 @@ class ACLambda:
             reward=add_feature_axis(timestep.reward),
             done=timestep.done,
             initial_carry=state.critic_carry,
-            rngs={"memory": critic_memory_key},
+            rngs={"torso": critic_torso_key},
         )
         value = remove_time_axis(value)
         value = remove_feature_axis(value)
@@ -331,10 +331,10 @@ class ACLambda:
             key,
             env_key,
             actor_key,
-            actor_memory_key,
+            actor_torso_key,
             actor_dropout_key,
             critic_key,
-            critic_memory_key,
+            critic_torso_key,
             critic_dropout_key,
         ) = jax.random.split(key, 8)
 
@@ -356,7 +356,7 @@ class ACLambda:
         actor_params = self.actor_network.init(
             {
                 "params": actor_key,
-                "memory": actor_memory_key,
+                "torso": actor_torso_key,
                 "dropout": actor_dropout_key,
             },
             observation=timestep.obs,
@@ -369,7 +369,7 @@ class ACLambda:
         critic_params = self.critic_network.init(
             {
                 "params": critic_key,
-                "memory": critic_memory_key,
+                "torso": critic_torso_key,
                 "dropout": critic_dropout_key,
             },
             observation=timestep.obs,

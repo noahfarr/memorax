@@ -120,7 +120,7 @@ class MAPPO:
     def _stochastic_action(
         self, key: Key, state: MAPPOState
     ) -> tuple[Key, MAPPOState, Array, Array, Array, dict]:
-        key, action_key, actor_memory_key, critic_memory_key = jax.random.split(key, 4)
+        key, action_key, actor_torso_key, critic_torso_key = jax.random.split(key, 4)
         timestep = to_sequence(state.timestep)
 
         (actor_carry, (probs, _)), intermediates = self.actor_network.apply(
@@ -131,7 +131,7 @@ class MAPPO:
             reward=add_feature_axis(timestep.reward),
             done=timestep.done,
             initial_carry=state.actor_carry,
-            rngs={"memory": actor_memory_key},
+            rngs={"torso": actor_torso_key},
             mutable=["intermediates"],
         )
 
@@ -154,7 +154,7 @@ class MAPPO:
                 reward=add_feature_axis(reward),
                 done=done,
                 initial_carry=state.critic_carry,
-                rngs={"memory": critic_memory_key},
+                rngs={"torso": critic_torso_key},
             )
 
             action = jax.vmap(remove_time_axis)(sampled_action)
@@ -171,7 +171,7 @@ class MAPPO:
                 reward=add_feature_axis(timestep.reward),
                 done=timestep.done,
                 initial_carry=state.critic_carry,
-                rngs={"memory": critic_memory_key},
+                rngs={"torso": critic_torso_key},
             )
 
             action = jax.vmap(remove_time_axis)(sampled_action)
@@ -258,7 +258,7 @@ class MAPPO:
     def _update_actor(
         self, key, state: MAPPOState, initial_actor_carry, transitions, advantages
     ):
-        key, memory_key, dropout_key = jax.random.split(key, 3)
+        key, torso_key, dropout_key = jax.random.split(key, 3)
 
         if self.cfg.burn_in_length > 0:
             burn_in = jax.tree.map(
@@ -289,7 +289,7 @@ class MAPPO:
                 reward=add_feature_axis(transitions.first.reward),
                 done=transitions.first.done,
                 initial_carry=initial_actor_carry,
-                rngs={"memory": memory_key, "dropout": dropout_key},
+                rngs={"torso": torso_key, "dropout": dropout_key},
             )
 
             log_probs = probs.log_prob(transitions.second.action)
@@ -332,7 +332,7 @@ class MAPPO:
     def _update_critic(
         self, key, state: MAPPOState, initial_critic_carry, transitions, returns
     ):
-        key, memory_key, dropout_key = jax.random.split(key, 3)
+        key, torso_key, dropout_key = jax.random.split(key, 3)
 
         if self.cfg.centralized_critic:
             if initial_critic_carry is not None:
@@ -383,7 +383,7 @@ class MAPPO:
                     reward=add_feature_axis(prev_reward),
                     done=prev_done,
                     initial_carry=initial_critic_carry,
-                    rngs={"memory": memory_key, "dropout": dropout_key},
+                    rngs={"torso": torso_key, "dropout": dropout_key},
                 )
                 values = remove_feature_axis(values)
 
@@ -435,7 +435,7 @@ class MAPPO:
                     reward=add_feature_axis(transitions.first.reward),
                     done=transitions.first.done,
                     initial_carry=initial_critic_carry,
-                    rngs={"memory": memory_key, "dropout": dropout_key},
+                    rngs={"torso": torso_key, "dropout": dropout_key},
                 )
                 values = remove_feature_axis(values)
 
@@ -685,10 +685,10 @@ class MAPPO:
             key,
             env_key,
             actor_key,
-            actor_memory_key,
+            actor_torso_key,
             actor_dropout_key,
             critic_key,
-            critic_memory_key,
+            critic_torso_key,
             critic_dropout_key,
         ) = jax.random.split(key, 8)
 
@@ -718,7 +718,7 @@ class MAPPO:
         actor_params = self.actor_network.init(
             {
                 "params": actor_key,
-                "memory": actor_memory_key,
+                "torso": actor_torso_key,
                 "dropout": actor_dropout_key,
             },
             observation=timestep.obs,
@@ -737,7 +737,7 @@ class MAPPO:
             critic_params = self.critic_network.init(
                 {
                     "params": critic_key,
-                    "memory": critic_memory_key,
+                    "torso": critic_torso_key,
                     "dropout": critic_dropout_key,
                 },
                 observation=obs,
@@ -754,7 +754,7 @@ class MAPPO:
             critic_params = self.critic_network.init(
                 {
                     "params": critic_key,
-                    "memory": critic_memory_key,
+                    "torso": critic_torso_key,
                     "dropout": critic_dropout_key,
                 },
                 observation=timestep.obs,

@@ -71,8 +71,8 @@ class SHMCell(RNNCellBase):
 
         U = ((eta_val * value)[..., :, None]) * key[..., None, :]
 
-        if self.sample_theta and self.has_rng("memory"):
-            rng = self.make_rng("memory")
+        if self.sample_theta and self.has_rng("torso"):
+            rng = self.make_rng("torso")
             batch_shape = v_c.shape[:-1]
             idx = random.randint(rng, batch_shape, 0, self.num_thetas, dtype=jnp.int32)
             theta_t = self.theta_table[idx]

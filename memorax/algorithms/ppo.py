@@ -94,8 +94,8 @@ class PPO:
         (
             key,
             action_key,
-            actor_memory_key,
-            critic_memory_key,
+            actor_torso_key,
+            critic_torso_key,
         ) = jax.random.split(key, 4)
 
         timestep = state.timestep.to_sequence()
@@ -107,7 +107,7 @@ class PPO:
             reward=add_feature_axis(timestep.reward),
             done=timestep.done,
             initial_carry=state.actor_carry,
-            rngs={"memory": actor_memory_key},
+            rngs={"torso": actor_torso_key},
             mutable=["intermediates"],
         )
         action, log_prob = probs.sample_and_log_prob(seed=action_key)
@@ -120,7 +120,7 @@ class PPO:
             reward=add_feature_axis(timestep.reward),
             done=timestep.done,
             initial_carry=state.critic_carry,
-            rngs={"memory": critic_memory_key},
+            rngs={"torso": critic_torso_key},
         )
 
         action = remove_time_axis(action)
@@ -209,7 +209,7 @@ class PPO:
     def _update_actor(
         self, key, state: PPOState, initial_actor_carry, transitions, advantages
     ):
-        key, memory_key, dropout_key = jax.random.split(key, 3)
+        key, torso_key, dropout_key = jax.random.split(key, 3)
 
         if self.cfg.burn_in_length > 0:
             burn_in = jax.tree.map(
@@ -239,7 +239,7 @@ class PPO:
                 reward=add_feature_axis(transitions.first.reward),
                 done=transitions.first.done,
                 initial_carry=initial_actor_carry,
-                rngs={"memory": memory_key, "dropout": dropout_key},
+                rngs={"torso": torso_key, "dropout": dropout_key},
             )
             log_probs = probs.log_prob(transitions.second.action)
             entropy = probs.entropy().mean()
@@ -281,7 +281,7 @@ class PPO:
     def _update_critic(
         self, key, state: PPOState, initial_critic_carry, transitions, returns
     ):
-        key, memory_key, dropout_key = jax.random.split(key, 3)
+        key, torso_key, dropout_key = jax.random.split(key, 3)
 
         if self.cfg.burn_in_length > 0:
             burn_in = jax.tree.map(
@@ -311,7 +311,7 @@ class PPO:
                 reward=add_feature_axis(transitions.first.reward),
                 done=transitions.first.done,
                 initial_carry=initial_critic_carry,
-                rngs={"memory": memory_key, "dropout": dropout_key},
+                rngs={"torso": torso_key, "dropout": dropout_key},
             )
             values = remove_feature_axis(values)
 
@@ -522,10 +522,10 @@ class PPO:
             key,
             env_key,
             actor_key,
-            actor_memory_key,
+            actor_torso_key,
             actor_dropout_key,
             critic_key,
-            critic_memory_key,
+            critic_torso_key,
             critic_dropout_key,
         ) = jax.random.split(key, 8)
 
@@ -548,7 +548,7 @@ class PPO:
         actor_params = self.actor_network.init(
             {
                 "params": actor_key,
-                "memory": actor_memory_key,
+                "torso": actor_torso_key,
                 "dropout": actor_dropout_key,
             },
             observation=timestep.obs,
@@ -561,7 +561,7 @@ class PPO:
         critic_params = self.critic_network.init(
             {
                 "params": critic_key,
-                "memory": critic_memory_key,
+                "torso": critic_torso_key,
                 "dropout": critic_dropout_key,
             },
             observation=timestep.obs,

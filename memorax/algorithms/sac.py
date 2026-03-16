@@ -178,7 +178,9 @@ class SAC:
 
     @partial(jax.jit, static_argnames=["self"])
     def init(self, key):
-        key, env_key, actor_key, critic_key, alpha_key = jax.random.split(key, 5)
+        key, env_key, actor_key, actor_torso_key, critic_key, critic_torso_key, alpha_key = (
+            jax.random.split(key, 7)
+        )
         env_keys = jax.random.split(env_key, self.cfg.num_envs)
 
         obs, env_state = jax.vmap(self.env.reset, in_axes=(0, None))(
@@ -195,9 +197,9 @@ class SAC:
             obs=obs, action=action, reward=reward, done=done
         ).to_sequence()
 
-        actor_carry = self.actor_network.initialize_carry(obs.shape)
+        actor_carry = self.actor_network.initialize_carry((self.cfg.num_envs, None))
         actor_params = self.actor_network.init(
-            actor_key,
+            {"params": actor_key, "torso": actor_torso_key},
             observation=timestep.obs,
             mask=timestep.done,
             action=timestep.action,
@@ -207,9 +209,9 @@ class SAC:
         )
         actor_optimizer_state = self.actor_optimizer.init(actor_params)
 
-        critic_carry = self.critic_network.initialize_carry(obs.shape)
+        critic_carry = self.critic_network.initialize_carry((self.cfg.num_envs, None))
         critic_params = self.critic_network.init(
-            critic_key,
+            {"params": critic_key, "torso": critic_torso_key},
             observation=timestep.obs,
             mask=timestep.done,
             action=timestep.action,
@@ -223,10 +225,10 @@ class SAC:
         alpha_params = self.alpha_network.init(alpha_key)
         alpha_optimizer_state = self.alpha_optimizer.init(alpha_params)
 
-        dummy_timestep = Timestep(obs=obs, action=action, reward=reward, done=done)
+        timestep = timestep.from_sequence()
         transition = Transition(
-            first=dummy_timestep,
-            second=dummy_timestep,
+            first=timestep,
+            second=timestep,
             carry=actor_carry,
         )
         buffer_state = self.buffer.init(jax.tree.map(lambda x: x[0], transition))
@@ -235,7 +237,7 @@ class SAC:
             key,
             SACState(
                 step=0,
-                timestep=timestep.from_sequence(),
+                timestep=timestep,
                 actor_carry=actor_carry,
                 critic_carry=critic_carry,
                 env_state=env_state,
@@ -565,7 +567,7 @@ class SAC:
         reward = jnp.zeros((self.cfg.num_envs,), dtype=jnp.float32)
         done = jnp.ones((self.cfg.num_envs,), dtype=jnp.bool_)
         timestep = Timestep(obs=obs, action=action, reward=reward, done=done)
-        carry = self.actor_network.initialize_carry(obs.shape)
+        carry = self.actor_network.initialize_carry((self.cfg.num_envs, None))
 
         state = state.replace(
             timestep=timestep,

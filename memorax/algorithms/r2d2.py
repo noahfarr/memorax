@@ -6,6 +6,7 @@ import jax
 import jax.numpy as jnp
 import lox
 import optax
+from flashbax.utils import get_tree_shape_prefix
 from flax import core, struct
 
 from memorax.buffers import compute_importance_weights
@@ -95,7 +96,7 @@ class R2D2:
     def _greedy_action(
         self, key: Key, state: R2D2State
     ) -> tuple[Key, R2D2State, Array, dict]:
-        key, memory_key = jax.random.split(key)
+        key, torso_key = jax.random.split(key)
         timestep = state.timestep.to_sequence()
         (carry, (q_values, _)), intermediates = self.q_network.apply(
             state.params,
@@ -105,7 +106,7 @@ class R2D2:
             reward=add_feature_axis(timestep.reward),
             done=timestep.done,
             initial_carry=state.carry,
-            rngs={"memory": memory_key},
+            rngs={"torso": torso_key},
             mutable=["intermediates"],
         )
         action = jnp.argmax(q_values, axis=-1)
@@ -202,7 +203,7 @@ class R2D2:
         key, sample_key = jax.random.split(key)
         batch = self.buffer.sample(state.buffer_state, sample_key)
 
-        key, memory_key, next_memory_key = jax.random.split(key, 3)
+        key, torso_key, next_torso_key = jax.random.split(key, 3)
 
         experience = batch.experience
 
@@ -248,7 +249,7 @@ class R2D2:
             reward=add_feature_axis(experience.second.reward),
             done=experience.second.done,
             initial_carry=initial_target_carry,
-            rngs={"memory": next_memory_key},
+            rngs={"torso": next_torso_key},
         )
 
         next_target_q_value = jnp.max(next_target_q_values, axis=-1)
@@ -269,10 +270,14 @@ class R2D2:
             td_target = self.q_network.head.get_target(experience, next_target_q_value)
 
         beta = self.beta_schedule(state.step)
+        add_batch_size, max_length_time_axis = get_tree_shape_prefix(
+            state.buffer_state.experience, n_axes=2
+        )
+        buffer_capacity = add_batch_size * max_length_time_axis
         buffer_size = jnp.where(
             state.buffer_state.is_full,
-            self.cfg.buffer_size,
-            state.buffer_state.current_index * self.cfg.num_envs,
+            buffer_capacity,
+            state.buffer_state.current_index * add_batch_size,
         )
         buffer_size = jnp.maximum(buffer_size, 1)
         importance_weights = compute_importance_weights(
@@ -289,7 +294,7 @@ class R2D2:
                 reward=add_feature_axis(experience.first.reward),
                 done=experience.first.done,
                 initial_carry=initial_carry,
-                rngs={"memory": memory_key},
+                rngs={"torso": torso_key},
             )
             action = add_feature_axis(experience.second.action)
             q_value = jnp.take_along_axis(q_values, action, axis=-1)
@@ -358,7 +363,7 @@ class R2D2:
 
     @partial(jax.jit, static_argnames=["self"])
     def init(self, key):
-        key, env_key, q_key, memory_key = jax.random.split(key, 4)
+        key, env_key, q_key, torso_key = jax.random.split(key, 4)
         env_keys = jax.random.split(env_key, self.cfg.num_envs)
 
         obs, env_state = jax.vmap(self.env.reset, in_axes=(0, None))(
@@ -370,13 +375,13 @@ class R2D2:
         )
         reward = jnp.zeros((self.cfg.num_envs,), dtype=jnp.float32)
         done = jnp.ones((self.cfg.num_envs,), dtype=jnp.bool_)
-        carry = self.q_network.initialize_carry(obs.shape)
+        carry = self.q_network.initialize_carry((self.cfg.num_envs, None))
 
         timestep = Timestep(
             obs=obs, action=action, reward=reward, done=done
         ).to_sequence()
         params = self.q_network.init(
-            {"params": q_key, "memory": memory_key},
+            {"params": q_key, "torso": torso_key},
             observation=timestep.obs,
             mask=timestep.done,
             action=timestep.action,
@@ -387,10 +392,10 @@ class R2D2:
         target_params = params
         optimizer_state = self.optimizer.init(params)
 
-        dummy_timestep = Timestep(obs=obs, action=action, reward=reward, done=done)
+        timestep = timestep.from_sequence()
         transition = Transition(
-            first=dummy_timestep,
-            second=dummy_timestep,
+            first=timestep,
+            second=timestep,
             carry=carry,
         )
         buffer_state = self.buffer.init(jax.tree.map(lambda x: x[0], transition))
@@ -399,7 +404,7 @@ class R2D2:
             key,
             R2D2State(
                 step=0,
-                timestep=timestep.from_sequence(),
+                timestep=timestep,
                 carry=carry,
                 env_state=env_state,
                 params=params,
@@ -449,7 +454,7 @@ class R2D2:
         reward = jnp.zeros((self.cfg.num_envs,), dtype=jnp.float32)
         done = jnp.ones((self.cfg.num_envs,), dtype=jnp.bool_)
         timestep = Timestep(obs=obs, action=action, reward=reward, done=done)
-        carry = self.q_network.initialize_carry(obs.shape)
+        carry = self.q_network.initialize_carry((self.cfg.num_envs, None))
 
         state = state.replace(timestep=timestep, carry=carry, env_state=env_state)
 

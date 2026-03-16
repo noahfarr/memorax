@@ -206,7 +206,7 @@ class PQN:
 
         carry, transitions, target = minibatch
 
-        key, memory_key, dropout_key = jax.random.split(key, 3)
+        key, torso_key, dropout_key = jax.random.split(key, 3)
 
         if self.cfg.burn_in_length > 0:
             burn_in = jax.tree.map(
@@ -236,7 +236,7 @@ class PQN:
                 reward=add_feature_axis(transitions.first.reward),
                 done=transitions.first.done,
                 initial_carry=carry,
-                rngs={"memory": memory_key, "dropout": dropout_key},
+                rngs={"torso": torso_key, "dropout": dropout_key},
             )
             action = add_feature_axis(transitions.second.action)
             q_value = jnp.take_along_axis(q_values, action, axis=-1)
@@ -280,7 +280,7 @@ class PQN:
             length=self.cfg.num_steps,
         )
 
-        key, memory_key, dropout_key = jax.random.split(key, 3)
+        key, torso_key, dropout_key = jax.random.split(key, 3)
 
         timestep = state.timestep.to_sequence()
         _, (q_values, _) = self.q_network.apply(
@@ -291,7 +291,7 @@ class PQN:
             reward=add_feature_axis(timestep.reward),
             done=timestep.done,
             initial_carry=state.carry,
-            rngs={"memory": memory_key, "dropout": dropout_key},
+            rngs={"torso": torso_key, "dropout": dropout_key},
         )
         q_value = jnp.max(q_values, axis=-1) * (1.0 - timestep.done)
         q_value = remove_time_axis(q_value)
@@ -330,7 +330,7 @@ class PQN:
 
     @partial(jax.jit, static_argnames=["self"])
     def init(self, key) -> tuple[Key, PQNState]:
-        key, env_key, q_key, memory_key = jax.random.split(key, 4)
+        key, env_key, q_key, torso_key = jax.random.split(key, 4)
         env_keys = jax.random.split(env_key, self.cfg.num_envs)
 
         obs, env_state = jax.vmap(self.env.reset, in_axes=(0, None))(
@@ -348,7 +348,7 @@ class PQN:
 
         carry = self.q_network.initialize_carry((self.cfg.num_envs, None))
         params = self.q_network.init(
-            {"params": q_key, "memory": memory_key},
+            {"params": q_key, "torso": torso_key},
             observation=timestep.obs,
             mask=timestep.done,
             action=timestep.action,

@@ -98,8 +98,8 @@ class GradientPPO:
         (
             key,
             action_key,
-            actor_memory_key,
-            critic_memory_key,
+            actor_torso_key,
+            critic_torso_key,
         ) = jax.random.split(key, 4)
 
         timestep = state.timestep.to_sequence()
@@ -111,7 +111,7 @@ class GradientPPO:
             reward=add_feature_axis(timestep.reward),
             done=timestep.done,
             initial_carry=state.actor_carry,
-            rngs={"memory": actor_memory_key},
+            rngs={"torso": actor_torso_key},
             mutable=["intermediates"],
         )
         action, log_prob = probs.sample_and_log_prob(seed=action_key)
@@ -124,7 +124,7 @@ class GradientPPO:
             reward=add_feature_axis(timestep.reward),
             done=timestep.done,
             initial_carry=state.critic_carry,
-            rngs={"memory": critic_memory_key},
+            rngs={"torso": critic_torso_key},
         )
 
         action = remove_time_axis(action)
@@ -200,7 +200,7 @@ class GradientPPO:
     def _update_actor(
         self, key, state: GradientPPOState, initial_actor_carry, transitions, advantages
     ):
-        key, memory_key, dropout_key = jax.random.split(key, 3)
+        key, torso_key, dropout_key = jax.random.split(key, 3)
 
         if self.cfg.burn_in_length > 0:
             burn_in = jax.tree.map(
@@ -230,7 +230,7 @@ class GradientPPO:
                 reward=add_feature_axis(transitions.first.reward),
                 done=transitions.first.done,
                 initial_carry=initial_actor_carry,
-                rngs={"memory": memory_key, "dropout": dropout_key},
+                rngs={"torso": torso_key, "dropout": dropout_key},
             )
             log_probs = probs.log_prob(transitions.second.action)
             entropy = probs.entropy().mean()
@@ -311,7 +311,7 @@ class GradientPPO:
         return delta_lambda, values
 
     def _update_critic(self, key, state: GradientPPOState, transitions, h_values, initial_critic_carry):
-        key, memory_key, dropout_key = jax.random.split(key, 3)
+        key, torso_key, dropout_key = jax.random.split(key, 3)
 
         def critic_loss_fn(params):
             delta_lambda, values = self._compute_delta_lambda(params, transitions, initial_critic_carry)
@@ -335,7 +335,7 @@ class GradientPPO:
         return key, state, critic_loss.mean(), delta_lambda
 
     def _update_h(self, key, state: GradientPPOState, transitions, delta_lambda, initial_h_carry):
-        key, memory_key, dropout_key = jax.random.split(key, 3)
+        key, torso_key, dropout_key = jax.random.split(key, 3)
         delta_lambda = jax.lax.stop_gradient(delta_lambda)
 
         def h_loss_fn(params):
@@ -347,7 +347,7 @@ class GradientPPO:
                 reward=add_feature_axis(transitions.first.reward),
                 done=transitions.first.done,
                 initial_carry=initial_h_carry,
-                rngs={"memory": memory_key, "dropout": dropout_key},
+                rngs={"torso": torso_key, "dropout": dropout_key},
             )
             h_values = remove_feature_axis(h_values)
             h_loss = -(jax.lax.stop_gradient(delta_lambda - h_values) * h_values).mean()
@@ -558,13 +558,13 @@ class GradientPPO:
             key,
             env_key,
             actor_key,
-            actor_memory_key,
+            actor_torso_key,
             actor_dropout_key,
             critic_key,
-            critic_memory_key,
+            critic_torso_key,
             critic_dropout_key,
             h_key,
-            h_memory_key,
+            h_torso_key,
             h_dropout_key,
         ) = jax.random.split(key, 11)
 
@@ -588,7 +588,7 @@ class GradientPPO:
         actor_params = self.actor_network.init(
             {
                 "params": actor_key,
-                "memory": actor_memory_key,
+                "torso": actor_torso_key,
                 "dropout": actor_dropout_key,
             },
             observation=timestep.obs,
@@ -601,7 +601,7 @@ class GradientPPO:
         critic_params = self.critic_network.init(
             {
                 "params": critic_key,
-                "memory": critic_memory_key,
+                "torso": critic_torso_key,
                 "dropout": critic_dropout_key,
             },
             observation=timestep.obs,
@@ -614,7 +614,7 @@ class GradientPPO:
         h_params = self.h_network.init(
             {
                 "params": h_key,
-                "memory": h_memory_key,
+                "torso": h_torso_key,
                 "dropout": h_dropout_key,
             },
             observation=timestep.obs,
