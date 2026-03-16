@@ -21,7 +21,7 @@ class MoE(nn.Module, Block):
     def __call__(
         self,
         inputs: Array,
-        mask: Optional[Array] = None,
+        done: Optional[Array] = None,
         initial_carry: Optional[Carry] = None,
         **kwargs,
     ) -> tuple[Carry, Array]:
@@ -35,7 +35,7 @@ class MoE(nn.Module, Block):
 
         outputs, carry = [], []
         for expert, carry_i in zip(self.experts, initial_carry):
-            carry_i, x = expert(inputs, mask=mask, initial_carry=carry_i, **kwargs)
+            carry_i, x = expert(inputs, done=done, initial_carry=carry_i, **kwargs)
             outputs.append(x)
             carry.append(carry_i)
 

@@ -69,10 +69,9 @@ class GradientPPO:
         (actor_carry, (probs, _)), intermediates = self.actor_network.apply(
             state.actor_params,
             observation=timestep.obs,
-            mask=timestep.done,
+            done=timestep.done,
             action=timestep.action,
             reward=add_feature_axis(timestep.reward),
-            done=timestep.done,
             initial_carry=state.actor_carry,
             mutable=["intermediates"],
         )
@@ -106,10 +105,9 @@ class GradientPPO:
         (actor_carry, (probs, _)), intermediates = self.actor_network.apply(
             state.actor_params,
             observation=timestep.obs,
-            mask=timestep.done,
+            done=timestep.done,
             action=timestep.action,
             reward=add_feature_axis(timestep.reward),
-            done=timestep.done,
             initial_carry=state.actor_carry,
             rngs={"torso": actor_torso_key},
             mutable=["intermediates"],
@@ -119,10 +117,9 @@ class GradientPPO:
         critic_carry, (value, _) = self.critic_network.apply(
             state.critic_params,
             observation=timestep.obs,
-            mask=timestep.done,
+            done=timestep.done,
             action=timestep.action,
             reward=add_feature_axis(timestep.reward),
-            done=timestep.done,
             initial_carry=state.critic_carry,
             rngs={"torso": critic_torso_key},
         )
@@ -209,10 +206,9 @@ class GradientPPO:
             initial_actor_carry, (_, _) = self.actor_network.apply(
                 jax.lax.stop_gradient(state.actor_params),
                 observation=burn_in.first.obs,
-                mask=burn_in.first.done,
+                done=burn_in.first.done,
                 action=burn_in.first.action,
                 reward=add_feature_axis(burn_in.first.reward),
-                done=burn_in.first.done,
                 initial_carry=initial_actor_carry,
             )
             initial_actor_carry = jax.lax.stop_gradient(initial_actor_carry)
@@ -225,10 +221,9 @@ class GradientPPO:
             _, (probs, _) = self.actor_network.apply(
                 params,
                 observation=transitions.first.obs,
-                mask=transitions.first.done,
+                done=transitions.first.done,
                 action=transitions.first.action,
                 reward=add_feature_axis(transitions.first.reward),
-                done=transitions.first.done,
                 initial_carry=initial_actor_carry,
                 rngs={"torso": torso_key, "dropout": dropout_key},
             )
@@ -274,20 +269,18 @@ class GradientPPO:
         _, (values, _) = self.critic_network.apply(
             critic_params,
             observation=transitions.first.obs,
-            mask=transitions.first.done,
+            done=transitions.first.done,
             action=transitions.first.action,
             reward=add_feature_axis(transitions.first.reward),
-            done=transitions.first.done,
             initial_carry=initial_critic_carry,
         )
         values = remove_feature_axis(values)
         _, (next_values, _) = self.critic_network.apply(
             critic_params,
             observation=transitions.second.obs,
-            mask=transitions.second.done,
+            done=transitions.second.done,
             action=transitions.second.action,
             reward=add_feature_axis(transitions.second.reward),
-            done=transitions.second.done,
             initial_carry=initial_critic_carry,
         )
         next_values = remove_feature_axis(next_values)
@@ -342,10 +335,9 @@ class GradientPPO:
             _, (h_values, _) = self.h_network.apply(
                 params,
                 observation=transitions.first.obs,
-                mask=transitions.first.done,
+                done=transitions.first.done,
                 action=transitions.first.action,
                 reward=add_feature_axis(transitions.first.reward),
-                done=transitions.first.done,
                 initial_carry=initial_h_carry,
                 rngs={"torso": torso_key, "dropout": dropout_key},
             )
@@ -382,10 +374,9 @@ class GradientPPO:
         _, (h_values, _) = self.h_network.apply(
             state.h_params,
             observation=transitions.first.obs,
-            mask=transitions.first.done,
+            done=transitions.first.done,
             action=transitions.first.action,
             reward=add_feature_axis(transitions.first.reward),
-            done=transitions.first.done,
             initial_carry=initial_h_carry,
         )
         h_values = remove_feature_axis(h_values)
@@ -601,10 +592,9 @@ class GradientPPO:
                 "dropout": actor_dropout_key,
             },
             observation=timestep.obs,
-            mask=timestep.done,
+            done=timestep.done,
             action=timestep.action,
             reward=add_feature_axis(timestep.reward),
-            done=timestep.done,
             initial_carry=actor_carry,
         )
         critic_params = self.critic_network.init(
@@ -614,10 +604,9 @@ class GradientPPO:
                 "dropout": critic_dropout_key,
             },
             observation=timestep.obs,
-            mask=timestep.done,
+            done=timestep.done,
             action=timestep.action,
             reward=add_feature_axis(timestep.reward),
-            done=timestep.done,
             initial_carry=critic_carry,
         )
         h_params = self.h_network.init(
@@ -627,10 +616,9 @@ class GradientPPO:
                 "dropout": h_dropout_key,
             },
             observation=timestep.obs,
-            mask=timestep.done,
+            done=timestep.done,
             action=timestep.action,
             reward=add_feature_axis(timestep.reward),
-            done=timestep.done,
             initial_carry=h_carry,
         )
 

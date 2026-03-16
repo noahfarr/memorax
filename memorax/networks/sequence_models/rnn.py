@@ -6,21 +6,20 @@ import jax.numpy as jnp
 from flax import linen as nn
 from flax.core.frozen_dict import FrozenDict
 from flax.core.scope import CollectionFilter, PRNGSequenceFilter
-from flax.linen.recurrent import RNNCellBase as FlaxRNNCellBase
 from flax.typing import InOutScanAxis
 
 from memorax.utils.axes import (
     add_feature_axis,
-    broadcast_mask,
+    broadcast_done,
     get_time_axis_and_input_shape,
-    mask_carry,
+    reset_carry,
 )
 from memorax.utils.typing import Array, Carry
 
 from .sequence_model import SequenceModel
 
 
-class RNNCellBase(FlaxRNNCellBase):
+class RNNCellBase(nn.recurrent.RNNCellBase):
     @abstractmethod
     def local_jacobian(
         self, carry: Carry, inputs: Array, sensitivity: Dict[str, Array], **kwargs
@@ -57,7 +56,7 @@ class RNN(SequenceModel):
     def __call__(
         self,
         inputs: Array,
-        mask: Array,
+        done: Array,
         initial_carry: Optional[Carry] = None,
         **kwargs,
     ) -> Tuple[Carry, Array]:
@@ -68,9 +67,9 @@ class RNN(SequenceModel):
 
         carry: Carry = initial_carry
 
-        def scan_fn(cell, carry, x, mask):
-            carry = mask_carry(
-                mask, carry, self.cell.initialize_carry(jax.random.key(0), input_shape)
+        def scan_fn(cell, carry, x, done):
+            carry = reset_carry(
+                done, carry, self.cell.initialize_carry(jax.random.key(0), input_shape)
             )
             carry, y = cell(carry, x)
             return carry, y
@@ -86,7 +85,7 @@ class RNN(SequenceModel):
             split_rngs=self.split_rngs,
         )
 
-        carry, outputs = scan(self.cell, carry, inputs, mask)
+        carry, outputs = scan(self.cell, carry, inputs, done)
 
         return carry, outputs
 
@@ -94,24 +93,24 @@ class RNN(SequenceModel):
     def initialize_carry(self, key: jax.Array, input_shape: Tuple[int, ...]) -> Carry:
         return self.cell.initialize_carry(key, input_shape)
 
-    def local_jacobian(self, inputs, mask, carry, sensitivity=None, **kwargs):
+    def local_jacobian(self, inputs, done, carry, sensitivity=None, **kwargs):
         if sensitivity is None:
-            next_carry, y = self(inputs, mask, carry, **kwargs)
+            next_carry, y = self(inputs, done, carry, **kwargs)
             return next_carry, y, None
 
         time_axis, input_shape = get_time_axis_and_input_shape(inputs)
         initial_carry = self.cell.initialize_carry(jax.random.key(0), input_shape)
 
-        def scan_fn(cell, state, x, mask_t):
+        def scan_fn(cell, state, x, done_t):
             cell_carry, sensitivity = state
 
             phantom = cell.compute_phantom(sensitivity)
             cell_carry = cell.inject_phantom(cell_carry, phantom)
 
-            cell_carry = mask_carry(mask_t, cell_carry, initial_carry)
+            cell_carry = reset_carry(done_t, cell_carry, initial_carry)
 
             sensitivity = jax.tree.map(
-                lambda s: jnp.where(broadcast_mask(add_feature_axis(mask_t), s), 0, s),
+                lambda s: jnp.where(broadcast_done(add_feature_axis(done_t), s), 0, s),
                 sensitivity,
             )
 
@@ -133,7 +132,7 @@ class RNN(SequenceModel):
         )
 
         (next_carry, next_sensitivity), outputs = scan(
-            self.cell, (carry, sensitivity), inputs, mask
+            self.cell, (carry, sensitivity), inputs, done
         )
 
         return next_carry, outputs, next_sensitivity

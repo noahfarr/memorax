@@ -18,18 +18,22 @@ from memorax.utils.typing import Array, Discrete, Environment, EnvParams, EnvSta
 
 
 @struct.dataclass(frozen=True)
-class ACLambdaConfig:
+class ACCausalLambdaConfig:
     num_envs: int
     trace_lambda: float
     actor_lr: float
     critic_lr: float
+    predecessor_lr: float = 1e-3
+    predecessor_gamma: float = 0.99
+    eta: float = 0.5
+    temperature: float = 1.0
     actor_kappa: float = 3.0
     critic_kappa: float = 2.0
     entropy_coefficient: float = 0.01
 
 
 @struct.dataclass(frozen=True)
-class ACLambdaState:
+class ACCausalLambdaState:
     step: int
     timestep: Timestep
     env_state: EnvState
@@ -39,26 +43,31 @@ class ACLambdaState:
     critic_params: core.FrozenDict[str, Any]
     critic_traces: core.FrozenDict[str, Any]
     critic_carry: Array
+    predecessor_params: core.FrozenDict[str, Any]
+    predecessor_carry: Array
+    previous_phi: Array
+    previous_psi_back: Array
 
 
 @struct.dataclass(frozen=True)
-class ACLambda:
-    cfg: ACLambdaConfig
+class ACCausalLambda:
+    cfg: ACCausalLambdaConfig
     env: Environment
     env_params: EnvParams
     actor_network: nn.Module
     critic_network: nn.Module
+    predecessor_network: nn.Module
 
     def _deterministic_action(
-        self, key: Key, state: ACLambdaState
-    ) -> tuple[Key, ACLambdaState, Array, Array, None, dict]:
+        self, key: Key, state: ACCausalLambdaState
+    ) -> tuple[Key, ACCausalLambdaState, Array, Array, None, dict]:
         timestep = state.timestep.to_sequence()
         (actor_carry, (probs, _)), intermediates = self.actor_network.apply(
             state.actor_params,
             observation=timestep.obs,
+            done=timestep.done,
             action=timestep.action,
             reward=add_feature_axis(timestep.reward),
-            done=timestep.done,
             initial_carry=state.actor_carry,
             mutable=["intermediates"],
         )
@@ -74,17 +83,17 @@ class ACLambda:
         return key, state, action, log_prob, None, intermediates
 
     def _stochastic_action(
-        self, key: Key, state: ACLambdaState
-    ) -> tuple[Key, ACLambdaState, Array, Array, Array, dict]:
+        self, key: Key, state: ACCausalLambdaState
+    ) -> tuple[Key, ACCausalLambdaState, Array, Array, Array, dict]:
         key, action_key, actor_torso_key, critic_torso_key = jax.random.split(key, 4)
         timestep = state.timestep.to_sequence()
 
         (actor_carry, (probs, _)), intermediates = self.actor_network.apply(
             state.actor_params,
             observation=timestep.obs,
+            done=timestep.done,
             action=timestep.action,
             reward=add_feature_axis(timestep.reward),
-            done=timestep.done,
             initial_carry=state.actor_carry,
             rngs={"torso": actor_torso_key},
             mutable=["intermediates"],
@@ -94,9 +103,9 @@ class ACLambda:
         critic_carry, (value, _) = self.critic_network.apply(
             state.critic_params,
             observation=timestep.obs,
+            done=timestep.done,
             action=timestep.action,
             reward=add_feature_axis(timestep.reward),
-            done=timestep.done,
             initial_carry=state.critic_carry,
             rngs={"torso": critic_torso_key},
         )
@@ -182,9 +191,9 @@ class ACLambda:
         (actor_carry, (probs, _)), intermediates = self.actor_network.apply(
             state.actor_params,
             observation=timestep.obs,
+            done=timestep.done,
             action=timestep.action,
             reward=add_feature_axis(timestep.reward),
-            done=timestep.done,
             initial_carry=state.actor_carry,
             rngs={"torso": actor_torso_key},
             mutable=["intermediates"],
@@ -196,9 +205,9 @@ class ACLambda:
         critic_carry, (value, _) = self.critic_network.apply(
             state.critic_params,
             observation=timestep.obs,
+            done=timestep.done,
             action=timestep.action,
             reward=add_feature_axis(timestep.reward),
-            done=timestep.done,
             initial_carry=state.critic_carry,
             rngs={"torso": critic_torso_key},
         )
@@ -217,9 +226,9 @@ class ACLambda:
         _, (next_value, _) = self.critic_network.apply(
             jax.lax.stop_gradient(state.critic_params),
             observation=next_timestep.obs,
+            done=next_timestep.done,
             action=next_timestep.action,
             reward=add_feature_axis(next_timestep.reward),
-            done=next_timestep.done,
             initial_carry=jax.lax.stop_gradient(critic_carry),
         )
         next_value = remove_time_axis(next_value)
@@ -228,6 +237,58 @@ class ACLambda:
         gamma = self.critic_network.head.gamma
         td_error = reward + gamma * (1 - done) * next_value - value
 
+        predecessor_carry, ((phi_next, psi_back_next), _) = self.predecessor_network.apply(
+            state.predecessor_params,
+            observation=next_timestep.obs,
+            done=next_timestep.done,
+            action=next_timestep.action,
+            reward=add_feature_axis(next_timestep.reward),
+            initial_carry=state.predecessor_carry,
+        )
+        phi_next = remove_time_axis(phi_next)
+        psi_back_next = remove_time_axis(psi_back_next)
+
+        causal_weight = jax.nn.sigmoid(
+            jnp.sum(
+                jax.lax.stop_gradient(psi_back_next)
+                * jax.lax.stop_gradient(state.previous_phi),
+                axis=-1,
+            )
+            / self.cfg.temperature
+        )
+        effective_lambda = (
+            (1 - self.cfg.eta) * self.cfg.trace_lambda + self.cfg.eta * causal_weight
+        )
+
+        psi_back_target = jax.lax.stop_gradient(
+            phi_next
+            + self.cfg.predecessor_gamma * (1 - done)[:, None] * state.previous_psi_back
+        )
+        initial_predecessor_carry = jax.lax.stop_gradient(state.predecessor_carry)
+
+        def predecessor_loss_fn(params):
+            _, ((_, predicted_psi_back), _) = self.predecessor_network.apply(
+                params,
+                observation=next_timestep.obs,
+                done=next_timestep.done,
+                action=next_timestep.action,
+                reward=add_feature_axis(next_timestep.reward),
+                initial_carry=initial_predecessor_carry,
+            )
+            predicted_psi_back = remove_time_axis(predicted_psi_back)
+            return 0.5 * jnp.mean(
+                jnp.sum(jnp.square(predicted_psi_back - psi_back_target), axis=-1)
+            )
+
+        predecessor_loss, predecessor_grads = jax.value_and_grad(predecessor_loss_fn)(
+            state.predecessor_params
+        )
+        predecessor_params = jax.tree.map(
+            lambda p, g: p - self.cfg.predecessor_lr * g,
+            state.predecessor_params,
+            predecessor_grads,
+        )
+
         initial_actor_carry = jax.lax.stop_gradient(state.actor_carry)
         initial_critic_carry = jax.lax.stop_gradient(state.critic_carry)
 
@@ -235,9 +296,9 @@ class ACLambda:
             _, (v, _) = self.critic_network.apply(
                 params,
                 observation=timestep.obs,
+                done=timestep.done,
                 action=timestep.action,
                 reward=add_feature_axis(timestep.reward),
-                done=timestep.done,
                 initial_carry=initial_critic_carry,
             )
             return remove_feature_axis(remove_time_axis(v))
@@ -246,9 +307,9 @@ class ACLambda:
             _, (dist, _) = self.actor_network.apply(
                 params,
                 observation=timestep.obs,
+                done=timestep.done,
                 action=timestep.action,
                 reward=add_feature_axis(timestep.reward),
-                done=timestep.done,
                 initial_carry=initial_actor_carry,
             )
             log_p = remove_time_axis(dist.log_prob(add_time_axis(action)))
@@ -258,18 +319,21 @@ class ACLambda:
         critic_grads = jax.jacobian(critic_loss_fn)(state.critic_params)
         actor_grads = jax.jacobian(actor_loss_fn)(state.actor_params)
 
-        trace_decay = gamma * self.cfg.trace_lambda
-
         def update_trace(z, g):
             n_trailing = z.ndim - 1
             not_done = (1 - state.timestep.done)[(slice(None),) + (None,) * n_trailing]
-            return trace_decay * not_done * z + g
+            decay = (gamma * effective_lambda)[(slice(None),) + (None,) * n_trailing]
+            return decay * not_done * z + g
 
         critic_traces = jax.tree.map(update_trace, state.critic_traces, critic_grads)
         actor_traces = jax.tree.map(update_trace, state.actor_traces, actor_grads)
 
-        critic_updates = self._obgd_update(critic_traces, td_error, self.cfg.critic_lr, self.cfg.critic_kappa)
-        actor_updates = self._obgd_update(actor_traces, td_error, self.cfg.actor_lr, self.cfg.actor_kappa)
+        critic_updates = self._obgd_update(
+            critic_traces, td_error, self.cfg.critic_lr, self.cfg.critic_kappa
+        )
+        actor_updates = self._obgd_update(
+            actor_traces, td_error, self.cfg.actor_lr, self.cfg.actor_kappa
+        )
 
         critic_params = jax.tree.map(lambda p, u: p + u, state.critic_params, critic_updates)
         actor_params = jax.tree.map(lambda p, u: p + u, state.actor_params, actor_updates)
@@ -279,23 +343,14 @@ class ACLambda:
             intermediates.get("intermediates", {}),
         )
 
-        broadcast_dims = tuple(range(state.timestep.done.ndim, state.timestep.action.ndim))
-        first = Timestep(
-            obs=state.timestep.obs,
-            action=jnp.where(
-                jnp.expand_dims(state.timestep.done, axis=broadcast_dims),
-                jnp.zeros_like(state.timestep.action),
-                state.timestep.action,
-            ),
-            reward=jnp.where(state.timestep.done, 0, state.timestep.reward),
-            done=state.timestep.done,
-        )
-        second = Timestep(obs=None, action=action, reward=reward, done=done)
         lox.log({
             "info": info,
             "intermediates": intermediates,
             "losses/td_error": td_error.mean(),
             "losses/value": value.mean(),
+            "losses/predecessor": predecessor_loss,
+            "losses/effective_lambda": effective_lambda.mean(),
+            "losses/causal_weight": causal_weight.mean(),
         })
 
         state = state.replace(
@@ -313,6 +368,10 @@ class ACLambda:
             critic_params=critic_params,
             critic_traces=critic_traces,
             critic_carry=critic_carry,
+            predecessor_params=predecessor_params,
+            predecessor_carry=predecessor_carry,
+            previous_phi=phi_next,
+            previous_psi_back=psi_back_next,
         )
 
         return (key, state), None
@@ -328,7 +387,10 @@ class ACLambda:
             critic_key,
             critic_torso_key,
             critic_dropout_key,
-        ) = jax.random.split(key, 8)
+            predecessor_key,
+            predecessor_torso_key,
+            predecessor_dropout_key,
+        ) = jax.random.split(key, 11)
 
         env_keys = jax.random.split(env_key, self.cfg.num_envs)
         obs, env_state = jax.vmap(self.env.reset, in_axes=(0, None))(
@@ -344,6 +406,9 @@ class ACLambda:
 
         actor_carry = self.actor_network.initialize_carry((self.cfg.num_envs, None))
         critic_carry = self.critic_network.initialize_carry((self.cfg.num_envs, None))
+        predecessor_carry = self.predecessor_network.initialize_carry(
+            (self.cfg.num_envs, None)
+        )
 
         actor_params = self.actor_network.init(
             {
@@ -352,9 +417,9 @@ class ACLambda:
                 "dropout": actor_dropout_key,
             },
             observation=timestep.obs,
+            done=timestep.done,
             action=timestep.action,
             reward=add_feature_axis(timestep.reward),
-            done=timestep.done,
             initial_carry=actor_carry,
         )
         critic_params = self.critic_network.init(
@@ -364,10 +429,22 @@ class ACLambda:
                 "dropout": critic_dropout_key,
             },
             observation=timestep.obs,
+            done=timestep.done,
             action=timestep.action,
             reward=add_feature_axis(timestep.reward),
-            done=timestep.done,
             initial_carry=critic_carry,
+        )
+        predecessor_params = self.predecessor_network.init(
+            {
+                "params": predecessor_key,
+                "torso": predecessor_torso_key,
+                "dropout": predecessor_dropout_key,
+            },
+            observation=timestep.obs,
+            done=timestep.done,
+            action=timestep.action,
+            reward=add_feature_axis(timestep.reward),
+            initial_carry=predecessor_carry,
         )
 
         actor_traces = jax.tree.map(
@@ -377,9 +454,21 @@ class ACLambda:
             lambda p: jnp.zeros((self.cfg.num_envs, *p.shape)), critic_params
         )
 
+        _, ((phi_init, _), _) = self.predecessor_network.apply(
+            predecessor_params,
+            observation=timestep.obs,
+            done=timestep.done,
+            action=timestep.action,
+            reward=add_feature_axis(timestep.reward),
+            initial_carry=predecessor_carry,
+        )
+        features_dim = phi_init.shape[-1]
+        previous_phi = jnp.zeros((self.cfg.num_envs, features_dim))
+        previous_psi_back = jnp.zeros((self.cfg.num_envs, features_dim))
+
         return (
             key,
-            ACLambdaState(
+            ACCausalLambdaState(
                 step=0,
                 timestep=timestep.from_sequence(),
                 env_state=env_state,
@@ -389,15 +478,21 @@ class ACLambda:
                 critic_params=critic_params,
                 critic_traces=critic_traces,
                 critic_carry=critic_carry,
+                predecessor_params=predecessor_params,
+                predecessor_carry=predecessor_carry,
+                previous_phi=previous_phi,
+                previous_psi_back=previous_psi_back,
             ),
         )
 
     @partial(jax.jit, static_argnames=["self", "num_steps"])
-    def warmup(self, key: Key, state: ACLambdaState, num_steps: int) -> tuple[Key, ACLambdaState]:
+    def warmup(
+        self, key: Key, state: ACCausalLambdaState, num_steps: int
+    ) -> tuple[Key, ACCausalLambdaState]:
         return key, state
 
     @partial(jax.jit, static_argnames=["self", "num_steps"])
-    def train(self, key: Key, state: ACLambdaState, num_steps: int):
+    def train(self, key: Key, state: ACCausalLambdaState, num_steps: int):
         (key, state), _ = jax.lax.scan(
             self._update_step,
             (key, state),
@@ -406,7 +501,13 @@ class ACLambda:
         return key, state
 
     @partial(jax.jit, static_argnames=["self", "num_steps", "deterministic"])
-    def evaluate(self, key: Key, state: ACLambdaState, num_steps: int, deterministic: bool = True):
+    def evaluate(
+        self,
+        key: Key,
+        state: ACCausalLambdaState,
+        num_steps: int,
+        deterministic: bool = True,
+    ):
         key, reset_key = jax.random.split(key)
         reset_key = jax.random.split(reset_key, self.cfg.num_envs)
         obs, env_state = jax.vmap(self.env.reset, in_axes=(0, None))(

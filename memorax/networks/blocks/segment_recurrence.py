@@ -15,7 +15,7 @@ from .base import Block
 @struct.dataclass
 class Memory:
     state: Array
-    mask: Array
+    done: Array
 
 
 class SegmentRecurrence(nn.Module, Block):
@@ -42,8 +42,8 @@ class SegmentRecurrence(nn.Module, Block):
         state = jnp.zeros(
             (*batch_dims, self.memory_length, self.features), dtype=self.dtype
         )
-        mask = jnp.zeros((*batch_dims, self.memory_length), dtype=jnp.int32)
-        memory = Memory(state=state, mask=mask)
+        done = jnp.zeros((*batch_dims, self.memory_length), dtype=jnp.int32)
+        memory = Memory(state=state, done=done)
 
         carry = self.module.initialize_carry(key, input_shape)
         return (memory, carry)
@@ -52,7 +52,7 @@ class SegmentRecurrence(nn.Module, Block):
     def __call__(
         self,
         inputs: Array,
-        mask: Optional[Array] = None,
+        done: Optional[Array] = None,
         initial_carry: Optional[Carry] = None,
         **kwargs,
     ) -> tuple[Carry, Array]:
@@ -60,27 +60,27 @@ class SegmentRecurrence(nn.Module, Block):
             input_shape = get_input_shape(inputs)
             initial_carry = self.initialize_carry(jax.random.key(0), input_shape)
 
-        if mask is None:
+        if done is None:
             batch_size, seq_len, *_ = inputs.shape
-            mask = jnp.zeros((batch_size, seq_len), dtype=jnp.int32)
+            done = jnp.zeros((batch_size, seq_len), dtype=jnp.int32)
 
         memory, carry = initial_carry
 
         carry, y = self.module(
             inputs,
-            mask,
+            done,
             initial_carry=carry,
             memory=memory.state,
-            memory_mask=memory.mask,
+            memory_done=memory.done,
             **kwargs,
         )
 
         state = jnp.concatenate([memory.state, jax.lax.stop_gradient(y)], axis=1)
         state = state[:, -self.memory_length :]
 
-        mask = jnp.concatenate([memory.mask, mask], axis=1)
-        mask = mask[:, -self.memory_length :]
+        done = jnp.concatenate([memory.done, done], axis=1)
+        done = done[:, -self.memory_length :]
 
-        memory = Memory(state=state, mask=mask)
+        memory = Memory(state=state, done=done)
 
         return (memory, carry), y

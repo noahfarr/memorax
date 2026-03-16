@@ -55,16 +55,16 @@ def get_time_axis_and_input_shape(inputs: jax.Array, num_feature_axes=1):
     return time_axis, input_shape
 
 
-def broadcast_mask(mask: jax.Array, carry: jax.Array) -> jax.Array:
-    while mask.ndim != carry.ndim:
-        mask = mask[..., None] if mask.ndim < carry.ndim else mask[..., 0]
-    return mask
+def broadcast_done(done: jax.Array, carry: jax.Array) -> jax.Array:
+    while done.ndim != carry.ndim:
+        done = done[..., None] if done.ndim < carry.ndim else done[..., 0]
+    return done
 
 
-def mask_carry(mask, carry, initial_carry):
+def reset_carry(done, carry, initial_carry):
     return jax.tree.map(
         lambda initial_carry, carry: jnp.where(
-            broadcast_mask(mask, carry), initial_carry, carry
+            broadcast_done(done, carry), initial_carry, carry
         ),
         initial_carry,
         carry,

@@ -8,7 +8,7 @@ from flax import linen as nn
 
 from memorax.utils.axes import (
     add_feature_axis,
-    broadcast_mask,
+    broadcast_done,
     get_input_shape,
     init,
     last,
@@ -59,14 +59,14 @@ class MemoroidCellBase(nn.Module):
 class Memoroid(SequenceModel):
     cell: MemoroidCellBase
 
-    def scan_fn(self, z, initial_carry, mask):
+    def scan_fn(self, z, initial_carry, done):
         z = jax.tree.map(
             lambda c, e: jnp.concatenate([c, e], axis=1),
             initial_carry,
             z,
         )
 
-        reset = jnp.concatenate([jnp.zeros((mask.shape[0], 1)), mask], axis=1)
+        reset = jnp.concatenate([jnp.zeros((done.shape[0], 1)), done], axis=1)
         reset = add_feature_axis(reset)
 
         cell = self.cell
@@ -79,7 +79,7 @@ class Memoroid(SequenceModel):
             combined = cell.binary_operator(lhs_carry, rhs_carry)
 
             out = jax.tree.map(
-                lambda rc, c: jnp.where(broadcast_mask(rhs_reset, rc), rc, c),
+                lambda rc, c: jnp.where(broadcast_done(rhs_reset, rc), rc, c),
                 rhs_carry,
                 combined,
             )
@@ -96,7 +96,7 @@ class Memoroid(SequenceModel):
     def __call__(
         self,
         inputs: Array,
-        mask: Array,
+        done: Array,
         initial_carry: Optional[Carry] = None,
         **kwargs,
     ) -> Tuple[Carry, Array]:
@@ -105,7 +105,7 @@ class Memoroid(SequenceModel):
             initial_carry = self.cell.initialize_carry(jax.random.key(0), input_shape)
 
         z = self.cell(inputs, **kwargs)
-        h, next_carry = self.scan_fn(z, initial_carry, mask)
+        h, next_carry = self.scan_fn(z, initial_carry, done)
         y = self.cell.read(h, inputs, **kwargs)
 
         return next_carry, y
@@ -113,9 +113,9 @@ class Memoroid(SequenceModel):
     def initialize_carry(self, key: jax.Array, input_shape: Tuple[int, ...]) -> Carry:
         return self.cell.initialize_carry(key, input_shape)
 
-    def _propagate_sensitivities(self, decay, jacobians, sensitivity, mask):
+    def _propagate_sensitivities(self, decay, jacobians, sensitivity, done):
         B, T, H = decay.shape
-        mask = add_feature_axis(mask)
+        done = add_feature_axis(done)
         next_sensitivity = {}
 
         @jax.vmap
@@ -132,7 +132,7 @@ class Memoroid(SequenceModel):
 
             J = J.reshape(B, T, H * param_size)
             S = S.reshape(B, 1, H * param_size)
-            a = jnp.where(mask, 0, jnp.repeat(decay, param_size, axis=-1))
+            a = jnp.where(done, 0, jnp.repeat(decay, param_size, axis=-1))
 
             state = jnp.concatenate([S, J], axis=1)
             a = jnp.concatenate([jnp.ones_like(S), a], axis=1)
@@ -143,14 +143,14 @@ class Memoroid(SequenceModel):
         return next_sensitivity
 
     @nn.compact
-    def local_jacobian(self, inputs, mask, carry, sensitivity=None, **kwargs):
+    def local_jacobian(self, inputs, done, carry, sensitivity=None, **kwargs):
         z = self.cell(inputs, **kwargs)
 
         if sensitivity is not None:
             phantom = self.cell.compute_phantom(sensitivity)
             carry = self.cell.inject_phantom(carry, phantom)
 
-        h, next_carry = self.scan_fn(z, carry, mask)
+        h, next_carry = self.scan_fn(z, carry, done)
         y = self.cell.read(h, inputs, **kwargs)
 
         next_sensitivity = None
@@ -162,15 +162,15 @@ class Memoroid(SequenceModel):
                 carry,
                 h,
             )
-            reset = add_feature_axis(mask)
+            reset = add_feature_axis(done)
             prev_carry = jax.tree.map(
-                lambda c: jnp.where(broadcast_mask(reset, c), 0, c),
+                lambda c: jnp.where(broadcast_done(reset, c), 0, c),
                 prev_carry,
             )
             decay, jacobians = self.cell.local_jacobian(prev_carry, z, inputs)
             if jacobians:
                 next_sensitivity = self._propagate_sensitivities(
-                    decay, jacobians, sensitivity, mask
+                    decay, jacobians, sensitivity, done
                 )
             else:
                 next_sensitivity = sensitivity

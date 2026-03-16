@@ -101,10 +101,9 @@ class R2D2:
         (carry, (q_values, _)), intermediates = self.q_network.apply(
             state.params,
             observation=timestep.obs,
-            mask=timestep.done,
+            done=timestep.done,
             action=timestep.action,
             reward=add_feature_axis(timestep.reward),
-            done=timestep.done,
             initial_carry=state.carry,
             rngs={"torso": torso_key},
             mutable=["intermediates"],
@@ -220,20 +219,18 @@ class R2D2:
             initial_carry, (_, _) = self.q_network.apply(
                 jax.lax.stop_gradient(state.params),
                 observation=burn_in.first.obs,
-                mask=burn_in.first.done,
+                done=burn_in.first.done,
                 action=burn_in.first.action,
                 reward=add_feature_axis(burn_in.first.reward),
-                done=burn_in.first.done,
                 initial_carry=initial_carry,
             )
             initial_carry = jax.lax.stop_gradient(initial_carry)
             initial_target_carry, (_, _) = self.q_network.apply(
                 jax.lax.stop_gradient(state.target_params),
                 observation=burn_in.second.obs,
-                mask=burn_in.second.done,
+                done=burn_in.second.done,
                 action=burn_in.second.action,
                 reward=add_feature_axis(burn_in.second.reward),
-                done=burn_in.second.done,
                 initial_carry=initial_target_carry,
             )
             initial_target_carry = jax.lax.stop_gradient(initial_target_carry)
@@ -244,10 +241,9 @@ class R2D2:
         _, (next_target_q_values, _) = self.q_network.apply(
             state.target_params,
             observation=experience.second.obs,
-            mask=experience.second.done,
+            done=experience.second.done,
             action=experience.second.action,
             reward=add_feature_axis(experience.second.reward),
-            done=experience.second.done,
             initial_carry=initial_target_carry,
             rngs={"torso": next_torso_key},
         )
@@ -289,10 +285,9 @@ class R2D2:
             carry, (q_values, aux) = self.q_network.apply(
                 params,
                 observation=experience.first.obs,
-                mask=experience.first.done,
+                done=experience.first.done,
                 action=experience.first.action,
                 reward=add_feature_axis(experience.first.reward),
-                done=experience.first.done,
                 initial_carry=initial_carry,
                 rngs={"torso": torso_key},
             )
@@ -383,10 +378,9 @@ class R2D2:
         params = self.q_network.init(
             {"params": q_key, "torso": torso_key},
             observation=timestep.obs,
-            mask=timestep.done,
+            done=timestep.done,
             action=timestep.action,
             reward=add_feature_axis(timestep.reward),
-            done=timestep.done,
             initial_carry=carry,
         )
         target_params = params

@@ -16,12 +16,12 @@ class Residual(nn.Module, Block):
     def __call__(
         self,
         inputs: Array,
-        mask: Optional[Array] = None,
+        done: Optional[Array] = None,
         initial_carry: Optional[Carry] = None,
         **kwargs,
     ) -> tuple[Carry, Array]:
         carry, output = self.module(
-            inputs, mask=mask, initial_carry=initial_carry, **kwargs
+            inputs, done=done, initial_carry=initial_carry, **kwargs
         )
         return carry, inputs + output
 
@@ -40,14 +40,14 @@ class GatedResidual(nn.Module, Block):
     def __call__(
         self,
         inputs: Array,
-        mask: Optional[Array] = None,
+        done: Optional[Array] = None,
         initial_carry: Optional[Carry] = None,
         **kwargs,
     ) -> tuple[Carry, Array]:
         features = inputs.shape[-1]
 
         carry, output = self.module(
-            inputs, mask=mask, initial_carry=initial_carry, **kwargs
+            inputs, done=done, initial_carry=initial_carry, **kwargs
         )
 
         gate = nn.Dense(

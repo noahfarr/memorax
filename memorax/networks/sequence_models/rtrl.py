@@ -16,7 +16,7 @@ class RTRL(SequenceModel):
     def __call__(
         self,
         inputs: Array,
-        mask: Array,
+        done: Array,
         initial_carry: Optional[Carry] = None,
         **kwargs,
     ) -> Tuple[Carry, Array]:
@@ -31,7 +31,7 @@ class RTRL(SequenceModel):
         )
 
         next_carry, y, next_sensitivity = self.sequence_model.local_jacobian(
-            inputs, mask, carry, sensitivity=sensitivity, **kwargs
+            inputs, done, carry, sensitivity=sensitivity, **kwargs
         )
 
         return (next_carry, next_sensitivity), y

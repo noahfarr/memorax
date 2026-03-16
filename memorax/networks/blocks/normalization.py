@@ -23,12 +23,12 @@ class PreNorm(nn.Module, Block):
     def __call__(
         self,
         inputs: Array,
-        mask: Optional[Array] = None,
+        done: Optional[Array] = None,
         initial_carry: Optional[Carry] = None,
         **kwargs,
     ) -> tuple[Carry, Array]:
         x = self.norm()(inputs)
-        return self.module(x, mask=mask, initial_carry=initial_carry, **kwargs)
+        return self.module(x, done=done, initial_carry=initial_carry, **kwargs)
 
     @nn.nowrap
     def initialize_carry(self, key, input_shape):
@@ -51,12 +51,12 @@ class PostNorm(nn.Module, Block):
     def __call__(
         self,
         inputs: Array,
-        mask: Optional[Array] = None,
+        done: Optional[Array] = None,
         initial_carry: Optional[Carry] = None,
         **kwargs,
     ) -> tuple[Carry, Array]:
         carry, output = self.module(
-            inputs, mask=mask, initial_carry=initial_carry, **kwargs
+            inputs, done=done, initial_carry=initial_carry, **kwargs
         )
         return carry, self.norm()(output)
 

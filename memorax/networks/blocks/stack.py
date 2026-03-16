@@ -24,7 +24,7 @@ class Stack(nn.Module, Block):
             Residual(module=PreNorm(module=SelfAttention(...))),
             Residual(module=PreNorm(module=FFN(...))),
         ))
-        carry, output = stack(inputs, mask, initial_carry)
+        carry, output = stack(inputs, done, initial_carry)
     """
 
     blocks: Sequence[nn.Module]
@@ -33,7 +33,7 @@ class Stack(nn.Module, Block):
     def __call__(
         self,
         inputs: Array,
-        mask: Optional[Array] = None,
+        done: Optional[Array] = None,
         initial_carry: Optional[tuple[Carry, ...]] = None,
         **kwargs,
     ) -> tuple[tuple[Carry, ...], Array]:
@@ -44,7 +44,7 @@ class Stack(nn.Module, Block):
         carries = []
 
         for i, block in enumerate(self.blocks):
-            carry, x = block(x, mask=mask, initial_carry=initial_carry[i], **kwargs)
+            carry, x = block(x, done=done, initial_carry=initial_carry[i], **kwargs)
             carries.append(carry)
 
         return tuple(carries), x

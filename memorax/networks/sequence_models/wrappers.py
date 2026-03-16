@@ -9,7 +9,7 @@ from .sequence_model import SequenceModel
 class SequenceModelWrapper(SequenceModel, nn.Module):
     network: nn.Module
 
-    def __call__(self, inputs, mask, initial_carry=None, **kwargs):
+    def __call__(self, inputs, done, initial_carry=None, **kwargs):
         carry = initial_carry
         return carry, self.network(inputs, **kwargs)
 
@@ -27,7 +27,7 @@ class RL2Wrapper(SequenceModel, nn.Module):
     sequence_model: nn.Module
     steps_per_trial: int
 
-    def __call__(self, inputs, mask, initial_carry=None, **kwargs):
+    def __call__(self, inputs, done, initial_carry=None, **kwargs):
         _, sequence_length, *_ = inputs.shape
 
         if initial_carry is None:
@@ -37,9 +37,9 @@ class RL2Wrapper(SequenceModel, nn.Module):
 
         steps = initial_carry.step[:, None] + time_indices[None, :]
 
-        mask = steps % self.steps_per_trial == 0
+        done = steps % self.steps_per_trial == 0
 
-        carry, outputs = self.sequence_model(inputs, mask, initial_carry.carry)
+        carry, outputs = self.sequence_model(inputs, done, initial_carry.carry)
         carry = RL2State(carry=carry, step=initial_carry.step + sequence_length)
         return carry, outputs
 

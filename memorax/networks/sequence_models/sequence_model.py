@@ -12,7 +12,7 @@ class SequenceModel(ABC, nn.Module):
     def __call__(
         self,
         inputs: Array,
-        mask: Array,
+        done: Array,
         initial_carry: Optional[Carry] = None,
         **kwargs,
     ) -> tuple: ...
@@ -23,7 +23,7 @@ class SequenceModel(ABC, nn.Module):
     def local_jacobian(
         self,
         inputs: Array,
-        mask: Array,
+        done: Array,
         carry: Carry,
         sensitivity: Optional[dict] = None,
         **kwargs,
@@ -34,7 +34,7 @@ class SequenceModel(ABC, nn.Module):
         By default, calls __call__ and returns None sensitivity.
         Override to provide RTRL support.
         """
-        next_carry, y = self(inputs, mask, carry, **kwargs)
+        next_carry, y = self(inputs, done, carry, **kwargs)
         return next_carry, y, None
 
     def initialize_sensitivity(

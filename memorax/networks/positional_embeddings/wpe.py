@@ -32,7 +32,7 @@ class LearnablePositionalEmbedding(AbsolutePositionalEmbedding, nn.Module):
     def __call__(
         self,
         inputs: Array,
-        mask: Array,
+        done: Array,
         initial_carry: Optional[Carry] = None,
         **kwargs,
     ) -> tuple[Array, Carry]:
@@ -41,15 +41,15 @@ class LearnablePositionalEmbedding(AbsolutePositionalEmbedding, nn.Module):
         if initial_carry is None:
             initial_carry = self.initialize_carry(None, (batch_size, inputs.shape[-1]))
 
-        def step(position: Array, mask: Array) -> tuple[Array, Array]:
-            position = jnp.where(mask, 0, position)
+        def step(position: Array, done: Array) -> tuple[Array, Array]:
+            position = jnp.where(done, 0, position)
             return position + 1, position
 
-        def compute_positions(mask: Array, offset: Array) -> tuple[Array, Array]:
-            carry, positions = jax.lax.scan(step, offset, mask)
+        def compute_positions(done: Array, offset: Array) -> tuple[Array, Array]:
+            carry, positions = jax.lax.scan(step, offset, done)
             return positions, carry
 
-        positions, carry = jax.vmap(compute_positions)(mask, initial_carry)
+        positions, carry = jax.vmap(compute_positions)(done, initial_carry)
 
         jax.debug.callback(_check_positions, positions, self.num_embeddings)
 

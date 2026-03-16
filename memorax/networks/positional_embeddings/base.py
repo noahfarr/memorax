@@ -7,7 +7,7 @@ class AbsolutePositionalEmbedding(Protocol):
     def __call__(
         self,
         inputs: Array,
-        mask: Array,
+        done: Array,
         initial_carry: Optional[Carry] = None,
         **kwargs,
     ): ...

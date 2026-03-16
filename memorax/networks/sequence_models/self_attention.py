@@ -27,30 +27,22 @@ def get_attention_implementation() -> tuple[Implementation, jnp.dtype]:
     return "xla", jnp.float32
 
 
-def get_attention_mask(mask, initial_carry, memory_mask, context_length, num_heads):
-    """Compute attention mask with position information for positional embeddings.
-
-    Returns:
-        Tuple of (combined_mask, query_input, key_input) where:
-            - combined_mask: combined attention and causal mask (B, NH, T, S)
-            - query_input: query positions (B, T)
-            - key_input: key positions (B, M + context_length)
-    """
-    B, T = mask.shape
-    _, M, *_ = memory_mask.shape
+def get_attention_mask(done, initial_carry, memory_done, context_length, num_heads):
+    B, T = done.shape
+    _, M, *_ = memory_done.shape
 
     query_mask = (
-        jnp.cumsum(mask.astype(jnp.int32), axis=1)
+        jnp.cumsum(done.astype(jnp.int32), axis=1)
         + jnp.max(
             jnp.cumsum(
-                jnp.concatenate([memory_mask, initial_carry.mask], axis=1), axis=1
+                jnp.concatenate([memory_done, initial_carry.done], axis=1), axis=1
             ),
             axis=1,
         )[..., None]
     )
 
     key_mask = jnp.concatenate(
-        [memory_mask, initial_carry.mask, mask], axis=1, dtype=jnp.int32
+        [memory_done, initial_carry.done, done], axis=1, dtype=jnp.int32
     )
     key_mask = jnp.cumsum(key_mask, axis=1)
     key_mask = key_mask[:, -(M + context_length) :]
@@ -75,12 +67,13 @@ def get_attention_mask(mask, initial_carry, memory_mask, context_length, num_hea
     combined_mask = nn.combine_masks(attention_mask, causal_mask, dtype=jnp.bool)
     return combined_mask, query_input, key_input
 
+
 from .sequence_model import SequenceModel
 
 
 @struct.dataclass
 class Carry:
-    mask: Array
+    done: Array
     key: Array
     value: Array
 
@@ -129,7 +122,7 @@ class SelfAttention(SequenceModel):
     def initialize_carry(self, key, input_shape):
         *batch_dims, _ = input_shape
         head_dim = self.features // self.num_heads
-        mask = jnp.ones((*batch_dims, self.context_length), dtype=jnp.int32)
+        done = jnp.ones((*batch_dims, self.context_length), dtype=jnp.int32)
         key = jnp.zeros(
             (*batch_dims, self.context_length, self.num_heads, head_dim),
             dtype=self.dtype,
@@ -138,15 +131,15 @@ class SelfAttention(SequenceModel):
             (*batch_dims, self.context_length, self.num_heads, head_dim),
             dtype=self.dtype,
         )
-        return Carry(mask, key, value)
+        return Carry(done, key, value)
 
     def __call__(
         self,
         x,
-        mask,
+        done,
         initial_carry: Optional[Carry] = None,
         memory: Optional[Array] = None,
-        memory_mask: Optional[Array] = None,
+        memory_done: Optional[Array] = None,
         **kwargs,
     ) -> Tuple[Carry, Array]:
         if initial_carry is None:
@@ -157,7 +150,7 @@ class SelfAttention(SequenceModel):
 
         if memory is None:
             memory = jnp.zeros((B, 0, self.features), dtype=self.dtype)
-            memory_mask = jnp.zeros((B, 0), dtype=jnp.int32)
+            memory_done = jnp.zeros((B, 0), dtype=jnp.int32)
 
         _, M, *_ = memory.shape
 
@@ -178,7 +171,7 @@ class SelfAttention(SequenceModel):
         value = value[:, -(M + self.context_length) :]
 
         attention_mask, query_input, key_input = get_attention_mask(
-            mask, initial_carry, memory_mask, self.context_length, self.num_heads
+            done, initial_carry, memory_done, self.context_length, self.num_heads
         )
 
         query, key, bias = self.positional_embedding(query, key, query_input, key_input)
@@ -195,11 +188,11 @@ class SelfAttention(SequenceModel):
 
         y = self.output_projection(x)
 
-        mask = jnp.concatenate([initial_carry.mask, mask], axis=1)[
+        done = jnp.concatenate([initial_carry.done, done], axis=1)[
             :, -self.context_length :
         ]
         key = key[:, -self.context_length :]
         value = value[:, -self.context_length :]
-        carry = initial_carry.replace(mask=mask, key=key, value=value)
+        carry = initial_carry.replace(done=done, key=key, value=value)
 
         return carry, y

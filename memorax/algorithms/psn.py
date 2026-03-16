@@ -8,17 +8,13 @@ import lox
 import optax
 from flax import core, struct
 
-from memorax.utils.axes import (
-    add_feature_axis,
-    remove_feature_axis,
-    remove_time_axis,
-)
 from memorax.utils import Timestep, Transition
+from memorax.utils.axes import add_feature_axis, remove_feature_axis, remove_time_axis
 from memorax.utils.typing import Array, Environment, EnvParams, EnvState, Key
 
 
 @struct.dataclass(frozen=True)
-class PQNConfig:
+class PSNConfig:
     num_envs: int
     num_steps: int
     td_lambda: float
@@ -32,7 +28,7 @@ class PQNConfig:
 
 
 @struct.dataclass(frozen=True)
-class PQNState:
+class PSNState:
     step: int
     timestep: Timestep
     env_state: EnvState
@@ -42,8 +38,8 @@ class PQNState:
 
 
 @struct.dataclass(frozen=True)
-class PQN:
-    cfg: PQNConfig
+class PSN:
+    cfg: PSNConfig
     env: Environment
     env_params: EnvParams
     q_network: nn.Module
@@ -51,8 +47,8 @@ class PQN:
     epsilon_schedule: optax.Schedule
 
     def _greedy_action(
-        self, key: Key, state: PQNState
-    ) -> tuple[Key, PQNState, Array, Array, dict]:
+        self, key: Key, state: PSNState
+    ) -> tuple[Key, PSNState, Array, Array, dict]:
         timestep = state.timestep.to_sequence()
         (carry, (q_values, _)), intermediates = self.q_network.apply(
             state.params,
@@ -69,16 +65,16 @@ class PQN:
         return key, state, action, q_values, intermediates
 
     def _random_action(
-        self, key: Key, state: PQNState
-    ) -> tuple[Key, PQNState, Array, None, dict]:
+        self, key: Key, state: PSNState
+    ) -> tuple[Key, PSNState, Array, None, dict]:
         key, action_key = jax.random.split(key)
         action_key = jax.random.split(action_key, self.cfg.num_envs)
         action = jax.vmap(self.env.action_space(self.env_params).sample)(action_key)
         return key, state, action, None, {}
 
     def _epsilon_greedy_action(
-        self, key: Key, state: PQNState
-    ) -> tuple[Key, PQNState, Array, Array, dict]:
+        self, key: Key, state: PSNState
+    ) -> tuple[Key, PSNState, Array, Array, dict]:
         key, state, random_action, _, _ = self._random_action(key, state)
 
         key, state, greedy_action, q_values, intermediates = self._greedy_action(
@@ -96,7 +92,7 @@ class PQN:
 
     def _step(
         self, carry, _, *, policy: Callable
-    ) -> tuple[tuple[Key, PQNState], Transition]:
+    ) -> tuple[tuple[Key, PSNState], Transition]:
         key, state = carry
 
         key, action_key, step_key = jax.random.split(key, 3)
@@ -161,7 +157,10 @@ class PQN:
             1.0 - transition.second.done
         ) * lambda_return + transition.second.done * transition.second.reward
 
-        q_value = jnp.max(transition.aux["q_values"], axis=-1)
+        action = add_feature_axis(transition.second.action)
+        q_value = remove_feature_axis(
+            jnp.take_along_axis(transition.aux["q_values"], action, axis=-1)
+        )
         return (lambda_return, q_value), lambda_return
 
     def _update_epoch(self, carry, _):
@@ -266,8 +265,8 @@ class PQN:
         return (key, state), (loss, *aux)
 
     def _update_step(
-        self, carry: tuple[Key, PQNState], _
-    ) -> tuple[tuple[Key, PQNState], dict]:
+        self, carry: tuple[Key, PSNState], _
+    ) -> tuple[tuple[Key, PSNState], dict]:
         key, state = carry
 
         initial_carry = state.carry
@@ -277,7 +276,9 @@ class PQN:
             length=self.cfg.num_steps,
         )
 
-        key, torso_key, dropout_key = jax.random.split(key, 3)
+        key, torso_key, dropout_key, action_key, sample_key = jax.random.split(
+            key, 5
+        )
 
         timestep = state.timestep.to_sequence()
         _, (q_values, _) = self.q_network.apply(
@@ -289,8 +290,23 @@ class PQN:
             initial_carry=state.carry,
             rngs={"torso": torso_key, "dropout": dropout_key},
         )
-        q_value = jnp.max(q_values, axis=-1) * (1.0 - timestep.done)
-        q_value = remove_time_axis(q_value)
+        q_values = remove_time_axis(q_values)
+        epsilon = self.epsilon_schedule(state.step)
+        greedy_action = jnp.argmax(q_values, axis=-1)
+        random_keys = jax.random.split(action_key, self.cfg.num_envs)
+        random_action = jax.vmap(self.env.action_space(self.env_params).sample)(
+            random_keys
+        )
+        action = jnp.where(
+            jax.random.uniform(sample_key, greedy_action.shape) < epsilon,
+            random_action,
+            greedy_action,
+        )
+        q_value = remove_feature_axis(
+            jnp.take_along_axis(q_values, add_feature_axis(action), axis=-1)
+        )
+        done = remove_time_axis(timestep.done)
+        q_value = q_value * (1.0 - done)
 
         _, targets = jax.lax.scan(
             self._td_lambda,
@@ -325,7 +341,7 @@ class PQN:
         return (key, state), None
 
     @partial(jax.jit, static_argnames=["self"])
-    def init(self, key) -> tuple[Key, PQNState]:
+    def init(self, key) -> tuple[Key, PSNState]:
         key, env_key, q_key, torso_key = jax.random.split(key, 4)
         env_keys = jax.random.split(env_key, self.cfg.num_envs)
 
@@ -355,7 +371,7 @@ class PQN:
 
         return (
             key,
-            PQNState(
+            PSNState(
                 step=0,
                 timestep=timestep.from_sequence(),
                 carry=carry,
@@ -366,14 +382,14 @@ class PQN:
         )
 
     @partial(jax.jit, static_argnames=["self", "num_steps"])
-    def warmup(self, key: Key, state: PQNState, num_steps: int) -> tuple[Key, PQNState]:
+    def warmup(self, key: Key, state: PSNState, num_steps: int) -> tuple[Key, PSNState]:
         return key, state
 
     @partial(jax.jit, static_argnames=["self", "num_steps"])
     def train(
         self,
         key: Key,
-        state: PQNState,
+        state: PSNState,
         num_steps: int,
     ):
         (key, state), _ = jax.lax.scan(
@@ -385,7 +401,7 @@ class PQN:
         return key, state
 
     @partial(jax.jit, static_argnames=["self", "num_steps"])
-    def evaluate(self, key: Key, state: PQNState, num_steps: int):
+    def evaluate(self, key: Key, state: PSNState, num_steps: int):
         key, reset_key = jax.random.split(key)
         reset_key = jax.random.split(reset_key, self.cfg.num_envs)
         obs, env_state = jax.vmap(self.env.reset, in_axes=(0, None))(

@@ -16,10 +16,9 @@ class Network(nn.Module):
     def __call__(
         self,
         observation: Array,
-        mask: Array,
+        done: Array,
         action: Array,
         reward: Array,
-        done: Array,
         initial_carry: Optional[Array] = None,
         **kwargs,
     ):
@@ -29,10 +28,9 @@ class Network(nn.Module):
 
         match self.torso(
             x,
-            mask=mask,
+            done=done,
             action=action,
             reward=reward,
-            done=done,
             initial_carry=initial_carry,
             **embeddings,
             **kwargs,
