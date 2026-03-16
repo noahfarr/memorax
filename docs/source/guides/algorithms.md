@@ -183,7 +183,7 @@ All algorithms follow the same interface:
 ```python
 key, state = agent.init(key)
 key, state = agent.warmup(key, state, num_steps=10_000)
-key, state, transitions = agent.train(key, state, num_steps=100_000)
+key, state = agent.train(key, state, num_steps=100_000)
 key, returns = agent.evaluate(key, state, num_episodes=10)
 ```
 

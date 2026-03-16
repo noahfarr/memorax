@@ -30,8 +30,8 @@ dependencies = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/memory-rl/memorax"
-Repository = "https://github.com/memory-rl/memorax"
+Homepage = "https://github.com/noahfarr/memorax"
+Repository = "https://github.com/noahfarr/memorax"
 Documentation = "https://memorax.readthedocs.io"
 
 [project.optional-dependencies]

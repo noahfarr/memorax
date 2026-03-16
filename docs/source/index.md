@@ -102,7 +102,7 @@ optimizer = optax.chain(optax.clip_by_global_norm(1.0), optax.adam(3e-4))
 
 agent = PPO(config, env, env_params, actor, critic, optimizer, optimizer)
 key, state = agent.init(jax.random.key(0))
-key, state, transitions = agent.train(key, state, num_steps=10_000)
+key, state = agent.train(key, state, num_steps=10_000)
 ```
 
 ## Citation

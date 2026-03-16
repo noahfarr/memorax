@@ -34,7 +34,7 @@ config = PPOConfig(
 
 agent = PPO(config, env, env_params, actor, critic, optimizer, optimizer)
 key, state = agent.init(key)
-key, state, transitions = agent.train(key, state, num_steps=1000)
+key, state = agent.train(key, state, num_steps=1000)
 ```
 
 ## Networks
@@ -101,7 +101,7 @@ JAX uses explicit random state management:
 ```python
 key = jax.random.key(0)
 key, state = agent.init(key)
-key, state, transitions = agent.train(key, state, num_steps=1000)
+key, state = agent.train(key, state, num_steps=1000)
 ```
 
 ### JIT Compilation
@@ -110,12 +110,25 @@ Training loops are JIT-compiled for performance. The first call may be slow due 
 
 ## Transitions
 
-Training produces `Transition` objects containing:
+`Transition` objects are used internally by algorithms and buffers:
 
 - `first`: The initial timestep
 - `second`: The next timestep
 - `carry`: Hidden state carry
 - `aux`: Auxiliary data
+
+## Logging
+
+Use `lox.spool` to capture training metrics. Wrap your environment with `RecordEpisodeStatistics` to track episode returns and lengths:
+
+```python
+import lox
+from memorax.environments.wrappers import RecordEpisodeStatistics
+
+env = RecordEpisodeStatistics(env)
+train = jax.vmap(lox.spool(agent.train), in_axes=(0, 0, None))
+(keys, state), logs = train(keys, state, num_steps)
+```
 
 ## Buffers
 

@@ -7,15 +7,18 @@ from dataclasses import asdict
 
 import flax.linen as nn
 import jax
+import lox
 import optax
 
 from memorax.algorithms import PPO, PPOConfig
 from memorax.environments import make
+from memorax.environments.wrappers import RecordEpisodeStatistics
 from memorax.loggers import DashboardLogger, Logger
 from memorax.networks import FeatureExtractor, Network, RNN, heads
 from memorax.networks.layers import Flatten
 
 env, env_params = make("gymnax::CartPole-v1")
+env = RecordEpisodeStatistics(env)
 
 config = PPOConfig(
     num_envs=8,
@@ -66,13 +69,27 @@ agent = PPO(
 logger = Logger([DashboardLogger(title="PPO-GRU CartPole", total_timesteps=500_000)])
 logger_state = logger.init(cfg=asdict(config))
 
+init = jax.vmap(agent.init)
+train = jax.vmap(lox.spool(agent.train), in_axes=(0, 0, None))
+
 key = jax.random.key(0)
-key, state = agent.init(key)
+keys = jax.random.split(key, 1)
+
+keys, state = init(keys)
 
 for i in range(0, 500_000, 10_000):
-    key, state, transitions = agent.train(key, state, num_steps=10_000)
-    training_statistics = Logger.get_episode_statistics(transitions, "training")
-    logger_state = logger.log(logger_state, training_statistics, step=state.step.item())
+    (keys, state), logs = train(keys, state, 10_000)
+
+    info = logs.pop("info")
+    episode_returns = info["returned_episode_returns"][info["returned_episode"]]
+    episode_lengths = info["returned_episode_lengths"][info["returned_episode"]]
+
+    data = {
+        "training/episode_returns": episode_returns,
+        "training/episode_lengths": episode_lengths,
+        **logs,
+    }
+    logger_state = logger.log(logger_state, data, step=state.step[0].item())
     logger.emit(logger_state)
 
 logger.finish(logger_state)

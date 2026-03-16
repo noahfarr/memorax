@@ -172,7 +172,7 @@ If you use `Memorax` for your work, please cite:
   title   = {Memorax: A Unified Framework for Memory-Augmented Reinforcement Learning},
   author  = {Noah Farr},
   year    = {2025},
-  url     = {https://github.com/memory-rl/memorax}
+  url     = {https://github.com/noahfarr/memorax}
 }
 ```
 
