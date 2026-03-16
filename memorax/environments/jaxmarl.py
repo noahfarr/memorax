@@ -1,54 +1,44 @@
 import jax.numpy as jnp
 
+from memorax.environments.wrappers import GymnaxWrapper
+
 
 def make(env_id, **kwargs):
     import jaxmarl
 
     env = jaxmarl.make(env_id, **kwargs)
+    env = JaxMarlGymnaxWrapper(env)
     return env, None
 
 
-class JaxMarlWrapper:
-    """Wraps a JAXMarl environment to return stacked arrays instead of per-agent dicts.
-
-    This simplifies multi-agent algorithm implementations by providing a consistent
-    array-based interface where the first axis is the agent dimension.
-    """
-
-    def __init__(self, env, agent_ids: tuple | None = None):
-        self._env = env
-        self._agent_ids = tuple(env.agents) if agent_ids is None else agent_ids
-
-    @property
-    def unwrapped(self):
-        return self._env
+class JaxMarlGymnaxWrapper(GymnaxWrapper):
 
     @property
     def agents(self):
-        return self._agent_ids
+        return self._env.agents
 
     @property
     def num_agents(self):
-        return len(self._agent_ids)
+        return len(self._env.agents)
 
     @property
-    def action_spaces(self):
+    def action_spaces(self, params=None):
         return self._env.action_spaces
 
-    def reset(self, key):
+    def reset(self, key, params=None):
         obs_dict, state = self._env.reset(key)
-        obs = jnp.stack([obs_dict[aid] for aid in self._agent_ids])
+        obs = jnp.stack([obs_dict[aid] for aid in self.agents])
         return obs, state
 
-    def step(self, key, state, actions):
-        actions_dict = {aid: actions[i] for i, aid in enumerate(self._agent_ids)}
+    def step(self, key, state, actions, params=None):
+        actions_dict = {aid: actions[i] for i, aid in enumerate(self.agents)}
         obs_dict, state, reward_dict, done_dict, info = self._env.step(
             key, state, actions_dict
         )
         return (
-            jnp.stack([obs_dict[aid] for aid in self._agent_ids]),
+            jnp.stack([obs_dict[aid] for aid in self.agents]),
             state,
-            jnp.stack([reward_dict[aid] for aid in self._agent_ids]),
-            jnp.stack([done_dict[aid] for aid in self._agent_ids]),
+            jnp.stack([reward_dict[aid] for aid in self.agents]),
+            jnp.stack([done_dict[aid] for aid in self.agents]),
             info,
         )
