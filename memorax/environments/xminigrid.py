@@ -39,15 +39,17 @@ class XLandMiniGridWrapper(GymnaxWrapper):
         return spaces.Discrete(self._env.num_actions(params.env_params))
 
 
-def make(env_id, benchmark_name, ruleset_key, **kwargs):
+def make(env_id, benchmark_name=None, ruleset_key=None, **kwargs):
     import xminigrid
     from xminigrid.wrappers import GymAutoResetWrapper
 
-    benchmark = xminigrid.load_benchmark(name=benchmark_name)
-    ruleset = benchmark.sample_ruleset(ruleset_key)
-
     env, env_params = xminigrid.make(env_id, **kwargs)
-    env_params = env_params.replace(ruleset=ruleset)
+
+    if benchmark_name is not None:
+        benchmark = xminigrid.load_benchmark(name=benchmark_name)
+        ruleset = benchmark.sample_ruleset(ruleset_key)
+        env_params = env_params.replace(ruleset=ruleset)
+
     max_steps_in_episode = env_params.max_steps
 
     env = GymAutoResetWrapper(env)

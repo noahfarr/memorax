@@ -431,7 +431,7 @@ class GradientPPO:
             shuffle_time_axis = (
                 initial_actor_carry is None or initial_critic_carry is None
             )
-            num_permutations = self.cfg.num_envs
+            num_permutations = self.cfg.num_envs * (self.cfg.num_steps // self.cfg.truncation_length)
             if shuffle_time_axis:
                 batch = (
                     initial_actor_carry,
@@ -512,6 +512,15 @@ class GradientPPO:
 
         initial_actor_carry, initial_critic_carry, initial_h_carry = jax.tree.map(
             lambda x: x[:, :, 0], transitions.carry
+        )
+
+        transitions, advantages, returns = jax.tree.map(
+            lambda x: x.reshape(-1, *x.shape[2:]),
+            (transitions, advantages, returns),
+        )
+        initial_actor_carry, initial_critic_carry, initial_h_carry = jax.tree.map(
+            lambda x: x.reshape(-1, *x.shape[2:]),
+            (initial_actor_carry, initial_critic_carry, initial_h_carry),
         )
 
         def cond_fun(carry):
