@@ -6,8 +6,8 @@ Memorax supports three families of sequence models for memory-augmented RL.
 
 | Family | Models | Strengths |
 |--------|--------|-----------|
-| RNNs | LSTM, GRU, sLSTM, SHM | Simple, well-understood |
-| State Space Models | S5, LRU, Mamba, MinGRU, mLSTM, FFM, RTU | Efficient long sequences via parallel scan |
+| RNNs | LSTM, GRU, sLSTM, SHM, RTU | Simple, well-understood |
+| State Space Models | S5, LRU, Mamba, MinGRU, mLSTM, FFM | Efficient long sequences via parallel scan |
 | Attention | SelfAttention, LinearAttention | Flexible, parallel training |
 
 ## RNNs
@@ -39,7 +39,7 @@ slstm = RNN(cell=sLSTMCell(features=64))
 ```python
 from memorax.networks import RNN, SHMCell
 
-shm = RNN(cell=SHMCell(features=64, memory_size=32))
+shm = RNN(cell=SHMCell(features=64, output_features=32))
 ```
 
 ## State Space Models
@@ -59,7 +59,7 @@ lru = Memoroid(cell=LRUCell(features=64, hidden_dim=64))
 ```python
 from memorax.networks import Memoroid, S5Cell
 
-s5 = Memoroid(cell=S5Cell(features=64, state_dim=64))
+s5 = Memoroid(cell=S5Cell(features=64, state_size=64))
 ```
 
 ### Mamba (Selective State Space Model)
@@ -87,7 +87,7 @@ Matrix LSTM using gated linear attention:
 ```python
 from memorax.networks import Memoroid, mLSTMCell
 
-mlstm = Memoroid(cell=mLSTMCell(features=64, num_heads=4, head_dim=16))
+mlstm = Memoroid(cell=mLSTMCell(features=64, hidden_dim=64, num_heads=4))
 ```
 
 ### FFM (Fast and Forgetful Memory)
@@ -95,15 +95,15 @@ mlstm = Memoroid(cell=mLSTMCell(features=64, num_heads=4, head_dim=16))
 ```python
 from memorax.networks import Memoroid, FFMCell
 
-ffm = Memoroid(cell=FFMCell(features=64, memory_size=32))
+ffm = Memoroid(cell=FFMCell(features=64, memory_size=32, context_size=64))
 ```
 
 ### RTU (Rotational Transformation Unit)
 
 ```python
-from memorax.networks import Memoroid, RTUCell
+from memorax.networks import RNN, RTUCell
 
-rtu = Memoroid(cell=RTUCell(features=64))
+rtu = RNN(cell=RTUCell(features=64, hidden_dim=64))
 ```
 
 ## Attention
@@ -115,7 +115,7 @@ Multi-head self-attention (used directly, no wrapper needed):
 ```python
 from memorax.networks import SelfAttention
 
-attention = SelfAttention(features=64, num_heads=4, head_dim=16)
+attention = SelfAttention(features=64, num_heads=4, context_length=128)
 ```
 
 ### Linear Attention

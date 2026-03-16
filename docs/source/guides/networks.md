@@ -59,12 +59,12 @@ Memorax also provides custom RNN cells like `sLSTMCell` and `SHMCell` that work 
 **Memoroid models** use JAX's associative scan for efficient O(T log T) parallel training. They cover state space models and linear recurrences. You wrap a cell in `Memoroid`:
 
 ```python
-from memorax.networks import Memoroid, MambaCell, S5Cell, LRUCell, mLSTMCell, MinGRUCell, FFMCell, RTUCell
+from memorax.networks import Memoroid, MambaCell, S5Cell, LRUCell, mLSTMCell, MinGRUCell, FFMCell
 
 torso = Memoroid(cell=MambaCell(features=64))
-torso = Memoroid(cell=S5Cell(features=64, state_dim=64))
+torso = Memoroid(cell=S5Cell(features=64, state_size=64))
 torso = Memoroid(cell=LRUCell(features=64, hidden_dim=64))
-torso = Memoroid(cell=mLSTMCell(features=64, num_heads=4, head_dim=16))
+torso = Memoroid(cell=mLSTMCell(features=64, hidden_dim=64, num_heads=4))
 ```
 
 **Attention** models like `SelfAttention` can be used directly as a torso. For linear-complexity attention, wrap `LinearAttentionCell` in a `Memoroid`:
@@ -72,7 +72,7 @@ torso = Memoroid(cell=mLSTMCell(features=64, num_heads=4, head_dim=16))
 ```python
 from memorax.networks import SelfAttention, LinearAttentionCell
 
-torso = SelfAttention(features=64, num_heads=4, head_dim=16)
+torso = SelfAttention(features=64, num_heads=4, context_length=128)
 torso = Memoroid(cell=LinearAttentionCell(features=64, num_heads=4, head_dim=16))
 ```
 

@@ -23,3 +23,4 @@ The ``make`` function supports the following namespaces:
 - ``jaxmarl::`` - JaxMARL multi-agent environments
 - ``gxm::`` - GXM environments
 - ``grimax::`` - Grimax environments
+- ``pobax::`` - POBAX environments

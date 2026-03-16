@@ -49,7 +49,7 @@ pip install "memorax[cuda]"
 To contribute to Memorax:
 
 ```bash
-git clone https://github.com/memory-rl/memorax.git
+git clone https://github.com/noahfarr/memorax.git
 cd memorax
 uv sync
 uv run pre-commit install
