@@ -64,6 +64,34 @@ class ContinuousQNetwork(nn.Module):
         return 0.5 * jnp.square(output - targets)
 
 
+class TwinContinuousQNetwork(nn.Module):
+    gamma: float = 0.99
+    kernel_init: nn.initializers.Initializer = nn.initializers.lecun_normal()
+    bias_init: nn.initializers.Initializer = nn.initializers.zeros_init()
+
+    @nn.compact
+    def __call__(
+        self, x: jnp.ndarray, *, action: jnp.ndarray, **kwargs
+    ) -> tuple[tuple[jnp.ndarray, jnp.ndarray], dict]:
+        inp = jnp.concatenate([x, action], axis=-1)
+        q1 = nn.Dense(1, kernel_init=self.kernel_init, bias_init=self.bias_init, name="q1")(inp)
+        q2 = nn.Dense(1, kernel_init=self.kernel_init, bias_init=self.bias_init, name="q2")(inp)
+        return (jnp.squeeze(q1, -1), jnp.squeeze(q2, -1)), {}
+
+    @nn.nowrap
+    def get_target(self, transition, next_value):
+        next_value = jax.lax.stop_gradient(next_value)
+        return (
+            transition.second.reward
+            + self.gamma * (1 - transition.second.done) * next_value
+        )
+
+    def loss(
+        self, output: jnp.ndarray, aux: dict, targets: jnp.ndarray, **kwargs
+    ) -> jnp.ndarray:
+        return 0.5 * jnp.square(output - targets)
+
+
 class VNetwork(nn.Module):
     gamma: float = 0.99
     kernel_init: nn.initializers.Initializer = nn.initializers.lecun_normal()

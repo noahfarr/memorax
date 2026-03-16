@@ -9,7 +9,7 @@ import optax
 from flax import core, struct
 
 from memorax.utils import Timestep, Transition, periodic_incremental_update
-from memorax.utils.axes import add_feature_axis, remove_feature_axis, remove_time_axis
+from memorax.utils.axes import add_feature_axis, remove_time_axis
 from memorax.utils.typing import (
     Array,
     Buffer,
@@ -271,8 +271,7 @@ class SAC:
         )
 
         key, sample_key = jax.random.split(key)
-        actions = dist.sample(seed=sample_key)
-        log_probs = dist.log_prob(actions)
+        _, log_probs = dist.sample_and_log_prob(seed=sample_key)
 
         def alpha_loss_fn(alpha_params):
             log_alpha = self.alpha_network.apply(alpha_params)
@@ -326,7 +325,7 @@ class SAC:
                 initial_carry=initial_critic_carry,
             )
             q = jnp.minimum(*qs)
-            actor_loss = (log_probs * alpha - remove_feature_axis(q)).mean()
+            actor_loss = (log_probs * alpha - q).mean()
             return actor_loss, (
                 carry,
                 {"losses/actor_loss": actor_loss, "losses/entropy": -log_probs.mean()},
@@ -379,7 +378,7 @@ class SAC:
 
         log_alpha = self.alpha_network.apply(state.alpha_params)
         alpha = jnp.exp(log_alpha)
-        next_value = remove_feature_axis(next_q) - alpha * next_log_probs
+        next_value = next_q - alpha * next_log_probs
         target_q = self.critic_network.head.get_target(experience, next_value)
 
         target_q = jax.lax.stop_gradient(target_q)
