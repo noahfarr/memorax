@@ -1,0 +1,225 @@
+@import url('https://fonts.googleapis.com/css2?family=Google+Sans:wght@400;500;700&family=Roboto:wght@300;400;500;700&family=Roboto+Mono:wght@400;500&display=swap');
+
+:root {
+  --memorax-primary: #5e35b1;
+  --memorax-primary-light: #9162e4;
+  --memorax-primary-dark: #280680;
+  --memorax-accent: #AECBFA;
+  --memorax-card-bg: #3C4043;
+  --memorax-card-hover: #4a4e52;
+  --memorax-hero-start: #1a0533;
+  --memorax-hero-end: #5e35b1;
+  --memorax-text-on-dark: #e8eaed;
+  --memorax-text-muted: #9aa0a6;
+  --memorax-surface: #f8f9fa;
+}
+
+html {
+  font-family: 'Roboto', -apple-system, BlinkMacSystemFont, sans-serif;
+}
+
+h1, h2, h3, h4, h5, h6,
+.sidebar-primary-items__title,
+.bd-header-article .article-header-content {
+  font-family: 'Google Sans', 'Roboto', sans-serif;
+}
+
+code, pre, .highlight {
+  font-family: 'Roboto Mono', monospace;
+}
+
+.hero-section {
+  background: linear-gradient(135deg, var(--memorax-hero-start) 0%, var(--memorax-hero-end) 100%);
+  color: white;
+  padding: 4rem 2rem;
+  border-radius: 12px;
+  margin: -1rem -1rem 2rem -1rem;
+  text-align: center;
+}
+
+.hero-section h1 {
+  font-family: 'Google Sans', sans-serif;
+  font-size: 3rem;
+  font-weight: 700;
+  margin-bottom: 0.5rem;
+  color: white;
+}
+
+.hero-section p {
+  font-size: 1.25rem;
+  color: rgba(255, 255, 255, 0.85);
+  max-width: 640px;
+  margin: 0 auto;
+}
+
+.cta-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 1rem;
+  margin: 2rem 0;
+}
+
+.cta-card {
+  background: var(--memorax-card-bg);
+  border-radius: 12px;
+  padding: 1.5rem;
+  color: var(--memorax-text-on-dark);
+  text-decoration: none;
+  transition: background 0.2s ease, transform 0.15s ease;
+  display: block;
+}
+
+.cta-card:hover {
+  background: var(--memorax-card-hover);
+  transform: translateY(-2px);
+  color: var(--memorax-accent);
+  text-decoration: none;
+}
+
+.cta-card h3 {
+  font-family: 'Google Sans', sans-serif;
+  font-size: 1.1rem;
+  font-weight: 500;
+  margin: 0 0 0.5rem 0;
+  color: var(--memorax-accent);
+}
+
+.cta-card p {
+  margin: 0;
+  font-size: 0.9rem;
+  color: var(--memorax-text-muted);
+}
+
+.feature-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 1.25rem;
+  margin: 2rem 0;
+}
+
+.feature-card {
+  background: var(--memorax-surface);
+  border: 1px solid #dadce0;
+  border-radius: 12px;
+  padding: 1.5rem;
+  transition: border-color 0.2s ease;
+}
+
+.feature-card:hover {
+  border-color: var(--memorax-primary);
+}
+
+.feature-card h3 {
+  font-family: 'Google Sans', sans-serif;
+  font-size: 1rem;
+  font-weight: 500;
+  margin: 0 0 0.5rem 0;
+  color: var(--memorax-primary);
+}
+
+.feature-card p {
+  margin: 0;
+  font-size: 0.9rem;
+  color: #5f6368;
+  line-height: 1.5;
+}
+
+.ecosystem-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 0.75rem;
+  margin: 1.5rem 0;
+}
+
+.ecosystem-badge {
+  background: var(--memorax-surface);
+  border: 1px solid #dadce0;
+  border-radius: 8px;
+  padding: 0.6rem 0.8rem;
+  text-align: center;
+  font-size: 0.85rem;
+  font-weight: 500;
+  color: #3c4043;
+  transition: border-color 0.2s ease, background 0.2s ease;
+}
+
+.ecosystem-badge:hover {
+  border-color: var(--memorax-primary);
+  background: white;
+}
+
+[data-theme="dark"] .feature-card {
+  background: #292b2e;
+  border-color: #5f6368;
+}
+
+[data-theme="dark"] .feature-card:hover {
+  border-color: var(--memorax-accent);
+}
+
+[data-theme="dark"] .feature-card h3 {
+  color: var(--memorax-accent);
+}
+
+[data-theme="dark"] .feature-card p {
+  color: var(--memorax-text-muted);
+}
+
+[data-theme="dark"] .ecosystem-badge {
+  background: #292b2e;
+  border-color: #5f6368;
+  color: var(--memorax-text-on-dark);
+}
+
+[data-theme="dark"] .ecosystem-badge:hover {
+  border-color: var(--memorax-accent);
+  background: var(--memorax-card-bg);
+}
+
+[data-theme="dark"] .cta-card {
+  background: #202124;
+  border: 1px solid #5f6368;
+}
+
+[data-theme="dark"] .cta-card:hover {
+  background: #292b2e;
+  border-color: var(--memorax-accent);
+}
+
+.bd-main .bd-content .bd-article-container {
+  max-width: 52rem;
+}
+
+.bd-page-width {
+  max-width: 88rem;
+}
+
+.copy-button {
+  border-radius: 4px;
+}
+
+.sd-card {
+  border-radius: 12px;
+}
+
+.admonition {
+  border-radius: 8px;
+}
+
+@media (max-width: 768px) {
+  .hero-section {
+    padding: 2.5rem 1.5rem;
+  }
+
+  .hero-section h1 {
+    font-size: 2rem;
+  }
+
+  .cta-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .feature-grid {
+    grid-template-columns: 1fr;
+  }
+}

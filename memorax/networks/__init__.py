@@ -7,6 +7,7 @@ from memorax.networks.blocks import (
     MoE,
     PostNorm,
     PreNorm,
+    Projection,
     Residual,
     SegmentRecurrence,
     Stack,
