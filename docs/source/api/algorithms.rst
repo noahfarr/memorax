@@ -71,7 +71,7 @@ ACLambda
 GradientPPO
 ------------
 
-:class:`GradientPPO` - PPO with RTRL gradient regularization.
+:class:`GradientPPO` - PPO with gradient eligibility traces.
 
 :class:`GradientPPOConfig` - Configuration dataclass for GradientPPO.
 

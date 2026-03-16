@@ -5,3 +5,7 @@
 .sidebar-primary-items__title {
   font-weight: 500;
 }
+
+html[data-theme="dark"] .bd-content img[src*="memorax_logo"] {
+  background-color: transparent;
+}

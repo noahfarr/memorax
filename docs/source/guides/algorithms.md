@@ -13,7 +13,7 @@ Memorax provides several RL algorithms optimized for memory-augmented learning.
 | PQN | Discrete | On-policy Q-learning |
 | R2D2 | Discrete | Recurrent value-based with prioritized replay |
 | AC(Lambda) | Discrete | Online actor-critic with eligibility traces |
-| GradientPPO | Discrete & Continuous | PPO with RTRL gradient regularization |
+| GradientPPO | Discrete & Continuous | PPO with gradient eligibility traces |
 
 ## PPO (Proximal Policy Optimization)
 
@@ -154,7 +154,7 @@ agent = ACLambda(config, env, env_params, actor, critic)
 
 ## GradientPPO
 
-PPO variant with RTRL gradient regularization for improved recurrent network training.
+PPO variant with gradient eligibility traces for improved credit assignment in recurrent networks.
 
 ```python
 from memorax.algorithms import GradientPPO, GradientPPOConfig
@@ -178,13 +178,19 @@ agent = GradientPPO(config, env, env_params, actor, critic, optimizer, optimizer
 
 ## Training Loop Pattern
 
-All algorithms follow the same interface:
+All algorithms follow the same interface. Use `lox.spool` to capture logged metrics from `train` and `evaluate`:
 
 ```python
+import lox
+
 key, state = agent.init(key)
 key, state = agent.warmup(key, state, num_steps=10_000)
-key, state = agent.train(key, state, num_steps=100_000)
-key, returns = agent.evaluate(key, state, num_episodes=10)
+
+train = lox.spool(agent.train)
+(key, state), logs = train(key, state, num_steps=100_000)
+
+evaluate = lox.spool(agent.evaluate)
+(key, transitions), eval_logs = evaluate(key, state, num_steps=100)
 ```
 
 ## Burn-in for Recurrent Networks

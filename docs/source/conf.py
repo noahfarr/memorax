@@ -77,7 +77,7 @@ intersphinx_mapping = {
 
 html_theme = "sphinx_book_theme"
 html_title = "Memorax"
-html_logo = "../_static/memorax_logo.svg"
+html_logo = "../_static/memorax_logo.png"
 
 html_theme_options = {
     "repository_url": "https://github.com/memory-rl/memorax",

@@ -1,24 +1,25 @@
 # Quick Start
 
-This guide demonstrates how to train a PPO agent with GRU memory on CartPole.
+This guide walks through training a PPO agent with GRU memory on CartPole.
+
+## Environment
+
+Create a Gymnax environment wrapped with episode statistics tracking:
 
 ```python
-from dataclasses import asdict
-
-import flax.linen as nn
-import jax
-import lox
-import optax
-
-from memorax.algorithms import PPO, PPOConfig
 from memorax.environments import make
 from memorax.environments.wrappers import RecordEpisodeStatistics
-from memorax.loggers import DashboardLogger, Logger
-from memorax.networks import FeatureExtractor, Network, RNN, heads
-from memorax.networks.layers import Flatten
 
 env, env_params = make("gymnax::CartPole-v1")
 env = RecordEpisodeStatistics(env)
+```
+
+## Configuration
+
+Define the PPO hyperparameters:
+
+```python
+from memorax.algorithms import PPOConfig
 
 config = PPOConfig(
     num_envs=8,
@@ -31,13 +32,23 @@ config = PPOConfig(
     clip_value_loss=True,
     entropy_coefficient=0.01,
 )
+```
+
+## Networks
+
+Memorax networks follow a `feature_extractor → torso → head` pipeline. The feature extractor processes raw observations, the torso handles temporal sequence modeling, and the head produces the final output (action distribution or value estimate).
+
+```python
+import flax.linen as nn
+from memorax.networks import FeatureExtractor, Network, RNN, heads
 
 d_model = 64
 
 feature_extractor = FeatureExtractor(
-    observation_extractor=Flatten(),
+    observation_extractor=nn.Sequential((nn.Dense(d_model), nn.relu)),
 )
 torso = RNN(cell=nn.GRUCell(features=d_model))
+
 actor_network = Network(
     feature_extractor=feature_extractor,
     torso=torso,
@@ -51,6 +62,15 @@ critic_network = Network(
     torso=torso,
     head=heads.VNetwork(kernel_init=nn.initializers.orthogonal(scale=1.0)),
 )
+```
+
+## Agent
+
+Combine the config, environment, networks, and optimizer into a PPO agent:
+
+```python
+import optax
+from memorax.algorithms import PPO
 
 optimizer = optax.chain(
     optax.clip_by_global_norm(1.0),
@@ -66,6 +86,19 @@ agent = PPO(
     actor_optimizer=optimizer,
     critic_optimizer=optimizer,
 )
+```
+
+## Training
+
+Use `jax.vmap` to vectorize across seeds and `lox.spool` to capture training metrics. The logger displays a live dashboard in the terminal:
+
+```python
+from dataclasses import asdict
+
+import jax
+import lox
+from memorax.loggers import DashboardLogger, Logger
+
 logger = Logger([DashboardLogger(title="PPO-GRU CartPole", total_timesteps=500_000)])
 logger_state = logger.init(cfg=asdict(config))
 
@@ -74,7 +107,6 @@ train = jax.vmap(lox.spool(agent.train), in_axes=(0, 0, None))
 
 key = jax.random.key(0)
 keys = jax.random.split(key, 1)
-
 keys, state = init(keys)
 
 for i in range(0, 500_000, 10_000):
