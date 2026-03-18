@@ -391,7 +391,7 @@ class PQN:
         return key, state
 
     @partial(jax.jit, static_argnames=["self", "num_steps"])
-    def evaluate(self, key: Key, state: PQNState, num_steps: int):
+    def evaluate(self, key: Key, state: PQNState, num_steps: int) -> tuple[Key, PQNState]:
         key, reset_key = jax.random.split(key)
         reset_key = jax.random.split(reset_key, self.cfg.num_envs)
         obs, env_state = jax.vmap(self.env.reset, in_axes=(0, None))(
@@ -408,13 +408,10 @@ class PQN:
 
         state = state.replace(timestep=timestep, carry=carry, env_state=env_state)
 
-        (key, *_), transitions = jax.lax.scan(
+        (key, state), _ = jax.lax.scan(
             partial(self._step, policy=self._greedy_action),
             (key, state),
             length=num_steps,
         )
 
-        return key, transitions.replace(
-            first=transitions.first.replace(obs=None),
-            second=transitions.second.replace(obs=None),
-        )
+        return key, state

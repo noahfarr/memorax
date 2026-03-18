@@ -636,8 +636,8 @@ class MAPPO:
 
         return key, state
 
-    @partial(jax.jit, static_argnames=["self", "num_steps", "deterministic"])
-    def evaluate(self, key: Key, state: MAPPOState, num_steps: int, deterministic: bool = True):
+    @partial(jax.jit, static_argnames=["self", "num_steps"])
+    def evaluate(self, key: Key, state: MAPPOState, num_steps: int) -> tuple[Key, MAPPOState]:
         key, reset_key = jax.random.split(key)
         num_agents = self.env.num_agents
 
@@ -666,16 +666,10 @@ class MAPPO:
             critic_carry=critic_carry,
         )
 
-        policy = (
-            self._deterministic_action if deterministic else self._stochastic_action
-        )
-        (key, *_), transitions = jax.lax.scan(
-            partial(self._step, policy=policy),
+        (key, state), _ = jax.lax.scan(
+            partial(self._step, policy=self._deterministic_action),
             (key, state),
             length=num_steps,
         )
 
-        return key, transitions.replace(
-            first=transitions.first.replace(obs=None),
-            second=transitions.second.replace(obs=None),
-        )
+        return key, state

@@ -660,10 +660,10 @@ class GradientPPO:
 
         return key, state
 
-    @partial(jax.jit, static_argnames=["self", "num_steps", "deterministic"])
+    @partial(jax.jit, static_argnames=["self", "num_steps"])
     def evaluate(
-        self, key: Key, state: GradientPPOState, num_steps: int, deterministic=True
-    ):
+        self, key: Key, state: GradientPPOState, num_steps: int
+    ) -> tuple[Key, GradientPPOState]:
         key, reset_key = jax.random.split(key)
         reset_key = jax.random.split(reset_key, self.cfg.num_envs)
         obs, env_state = jax.vmap(self.env.reset, in_axes=(0, None))(
@@ -689,16 +689,10 @@ class GradientPPO:
             env_state=env_state,
         )
 
-        policy = (
-            self._deterministic_action if deterministic else self._stochastic_action
-        )
-        (key, *_), transitions = jax.lax.scan(
-            partial(self._step, policy=policy),
+        (key, state), _ = jax.lax.scan(
+            partial(self._step, policy=self._deterministic_action),
             (key, state),
             length=num_steps,
         )
 
-        return key, transitions.replace(
-            first=transitions.first.replace(obs=None),
-            second=transitions.second.replace(obs=None),
-        )
+        return key, state

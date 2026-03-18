@@ -1,4 +1,5 @@
 from .ac_lambda import ACLambda, ACLambdaConfig, ACLambdaState
+from .algorithm import Algorithm, State
 from .dqn import DQN, DQNConfig, DQNState
 from .gradient_ppo import GradientPPO, GradientPPOConfig, GradientPPOState
 from .mappo import MAPPO, MAPPOConfig, MAPPOState
