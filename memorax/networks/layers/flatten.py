@@ -3,13 +3,15 @@ from math import prod
 import jax.numpy as jnp
 from flax import linen as nn
 
+from memorax.utils.typing import Array
+
 
 class Flatten(nn.Module):
     start_dim: int = 1
     end_dim: int = -1
 
     @nn.compact
-    def __call__(self, x: jnp.ndarray) -> jnp.ndarray:
+    def __call__(self, x: Array) -> Array:
         shape = x.shape
         ndim = len(shape)
 

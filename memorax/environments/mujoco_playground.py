@@ -1,8 +1,11 @@
+from typing import Any
+
 import jax
 import jax.numpy as jnp
 from gymnax.environments import spaces
 
 from memorax.environments.wrappers import GymnaxWrapper
+from memorax.utils.typing import Array, Key
 
 
 class TimeLimitWrapper(GymnaxWrapper):
@@ -10,12 +13,12 @@ class TimeLimitWrapper(GymnaxWrapper):
         super().__init__(env)
         self.episode_length = episode_length
 
-    def reset(self, rng: jax.Array):
+    def reset(self, rng: Array) -> Any:
         state = self._env.reset(rng)
         state.info["steps"] = jnp.zeros((rng.shape[:-1]), dtype=jnp.int32)
         return state
 
-    def step(self, state, action: jax.Array):
+    def step(self, state, action: Array) -> Any:
         state = self._env.step(state, action)
         steps = state.info["steps"] + 1
         limit = jnp.array(self.episode_length, dtype=jnp.int32)
@@ -26,13 +29,13 @@ class TimeLimitWrapper(GymnaxWrapper):
 
 
 class AutoResetWrapper(GymnaxWrapper):
-    def reset(self, rng: jax.Array):
+    def reset(self, rng: Array) -> Any:
         state = self._env.reset(rng)
         state.info["first_data"] = state.data
         state.info["first_obs"] = state.obs
         return state
 
-    def step(self, state, action: jax.Array):
+    def step(self, state, action: Array) -> Any:
         if "steps" in state.info:
             steps = state.info["steps"]
             steps = jnp.where(state.done, jnp.zeros_like(steps), steps)
@@ -58,15 +61,15 @@ class MuJoCoGymnaxWrapper(GymnaxWrapper):
         super().__init__(env)
         self.timestep = 0
 
-    def reset(self, key, params):
+    def reset(self, key: Key, params) -> tuple[Array, Any]:
         state = self._env.reset(key)
         return state.obs, state
 
-    def step(self, key, state, action, params):
+    def step(self, key: Key, state, action: Array, params) -> tuple[Array, Any, Array, Array, dict]:
         next_state = self._env.step(state, action)
         return (next_state.obs, next_state, next_state.reward, next_state.done, {})
 
-    def action_space(self, params):
+    def action_space(self, params) -> spaces.Box:
         n = self._env.action_size
         return spaces.Box(
             low=-1.0,
@@ -75,7 +78,7 @@ class MuJoCoGymnaxWrapper(GymnaxWrapper):
         )
 
 
-def make(env_id, **kwargs):
+def make(env_id: str, **kwargs) -> tuple:
     from ml_collections import FrozenConfigDict
     from mujoco_playground import registry
 

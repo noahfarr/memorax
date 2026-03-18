@@ -1,5 +1,5 @@
 from functools import partial
-from typing import Optional, Tuple
+from typing import Tuple
 
 import jax
 import jax.numpy as jnp
@@ -30,7 +30,7 @@ class LinearAttentionCell(MemoroidCellBase):
     num_heads: int
     kernel_init: Initializer = nn.initializers.lecun_normal()
     bias_init: Initializer = nn.initializers.zeros_init()
-    dtype: Optional[Dtype] = None
+    dtype: Dtype | None = None
     param_dtype: Dtype = jnp.float32
     eps: float = 1e-6
 

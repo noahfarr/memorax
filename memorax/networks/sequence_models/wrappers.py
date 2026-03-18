@@ -3,31 +3,33 @@ import jax
 import jax.numpy as jnp
 from flax import struct
 
+from memorax.utils.typing import Array, Carry, Key
+
 from .sequence_model import SequenceModel
 
 
 class SequenceModelWrapper(SequenceModel, nn.Module):
     network: nn.Module
 
-    def __call__(self, inputs, done, initial_carry=None, **kwargs):
+    def __call__(self, inputs: Array, done: Array, initial_carry: Carry | None = None, **kwargs) -> tuple[Carry, Array]:
         carry = initial_carry
         return carry, self.network(inputs, **kwargs)
 
-    def initialize_carry(self, key, input_shape):
+    def initialize_carry(self, key: Key, input_shape: tuple) -> None:
         return None
 
 
 @struct.dataclass
 class RL2State:
-    carry: jnp.ndarray
-    step: jnp.ndarray
+    carry: Array
+    step: Array
 
 
 class RL2Wrapper(SequenceModel, nn.Module):
     sequence_model: nn.Module
     steps_per_trial: int
 
-    def __call__(self, inputs, done, initial_carry=None, **kwargs):
+    def __call__(self, inputs: Array, done: Array, initial_carry: Carry | None = None, **kwargs) -> tuple[RL2State, Array]:
         _, sequence_length, *_ = inputs.shape
 
         if initial_carry is None:
@@ -43,7 +45,7 @@ class RL2Wrapper(SequenceModel, nn.Module):
         carry = RL2State(carry=carry, step=initial_carry.step + sequence_length)
         return carry, outputs
 
-    def initialize_carry(self, key, input_shape):
+    def initialize_carry(self, key: Key, input_shape: tuple) -> RL2State:
         batch_size, *_, features = input_shape
         return RL2State(
             carry=self.sequence_model.initialize_carry(key, (batch_size, features)),

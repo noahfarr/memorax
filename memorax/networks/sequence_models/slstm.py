@@ -1,6 +1,4 @@
 from functools import partial
-from typing import Optional, Tuple
-
 import jax
 import jax.numpy as jnp
 from flax import linen as nn
@@ -40,7 +38,7 @@ class sLSTMCell(RNNCellBase):
     conv_kernel_size: int = 4
     eps: float = 1e-6
     dropout_rate: float = 0.0
-    dtype: Optional[Dtype] = None
+    dtype: Dtype | None = None
     param_dtype: Dtype = jnp.float32
 
     def setup(self):
@@ -127,7 +125,7 @@ class sLSTMCell(RNNCellBase):
             param_dtype=self.param_dtype,
         )
 
-    def __call__(self, carry: Tuple, inputs: Array) -> Tuple[Tuple, Array]:
+    def __call__(self, carry: tuple, inputs: Array) -> tuple[tuple, Array]:
         """Process a single timestep.
 
         Args:
@@ -175,8 +173,8 @@ class sLSTMCell(RNNCellBase):
     def initialize_carry(
         self,
         key: jax.Array,
-        input_shape: Tuple[int, ...],
-    ) -> Tuple:
+        input_shape: tuple[int, ...],
+    ) -> tuple:
         """Initialize the carry state.
 
         Args:

@@ -1,11 +1,10 @@
 from functools import partial
-from typing import Tuple
 
 import jax
 import jax.numpy as jnp
 from flax.typing import Dtype
 
-from memorax.utils.typing import Array, Carry
+from memorax.utils.typing import Array, Carry, Key
 
 from .memoroid import MemoroidCellBase
 
@@ -102,13 +101,13 @@ class LRUCell(MemoroidCellBase):
         y = jax.vmap(jax.vmap(lambda si, xi: (C @ si).real + self.D * xi))(state, x)
         return y
 
-    def initialize_carry(self, key: jax.Array, input_shape: Tuple[int, ...]) -> Carry:
+    def initialize_carry(self, key: jax.Array, input_shape: tuple[int, ...]) -> Carry:
         *batch_dims, _ = input_shape
         state = jnp.zeros((*batch_dims, 1, self.hidden_dim), dtype=jnp.complex64)
         decay = jnp.ones((*batch_dims, 1, self.hidden_dim), dtype=jnp.complex64)
         return (state, decay)
 
-    def local_jacobian(self, carry, z, inputs, **kwargs):
+    def local_jacobian(self, carry, z, inputs, **kwargs) -> tuple[Array, dict]:
         prev_state = carry[0]
         state_contrib, _ = z
         lam = jnp.exp(-jnp.exp(self.nu_log) + 1j * jnp.exp(self.theta_log))
@@ -125,7 +124,7 @@ class LRUCell(MemoroidCellBase):
             "B_imag": 1j * gamma_exp[None, None, :, None] * inputs[:, :, None, :],
         }
 
-    def initialize_sensitivity(self, key, input_shape):
+    def initialize_sensitivity(self, key: Key, input_shape: tuple) -> dict:
         *batch_dims, _ = input_shape
         H = self.hidden_dim
         z = lambda *s: jnp.zeros((*batch_dims, 1, *s), dtype=jnp.complex64)

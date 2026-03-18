@@ -8,13 +8,17 @@ import lox
 import optax
 from flax import core, struct
 
-from memorax.utils.axes import (
-    add_feature_axis,
-    remove_feature_axis,
-    remove_time_axis,
-)
 from memorax.utils import Timestep, Transition
-from memorax.utils.typing import Array, Environment, EnvParams, EnvState, Key
+from memorax.utils.axes import add_feature_axis, remove_feature_axis, remove_time_axis
+from memorax.utils.typing import (
+    Array,
+    Carry,
+    Environment,
+    EnvParams,
+    EnvState,
+    Key,
+    PyTree,
+)
 
 
 @struct.dataclass(frozen=True)
@@ -148,7 +152,7 @@ class PQN:
         )
         return (key, state), transition
 
-    def _td_lambda(self, carry, transition):
+    def _td_lambda(self, carry: tuple, transition: Transition):
         lambda_return, next_q_value = carry
         target_bootstrap = self.q_network.head.get_target(transition, next_q_value)
 
@@ -164,13 +168,13 @@ class PQN:
         q_value = jnp.max(transition.aux["q_values"], axis=-1)
         return (lambda_return, q_value), lambda_return
 
-    def _update_epoch(self, carry, _):
+    def _update_epoch(self, carry: tuple, _):
         key, state, initial_carry, transitions, lambda_targets = carry
 
         key, permutation_key = jax.random.split(key)
         batch = (initial_carry, transitions, lambda_targets)
 
-        def shuffle(batch):
+        def shuffle(batch: PyTree):
             shuffle_time_axis = initial_carry is None
             num_permutations = self.cfg.num_envs
             if shuffle_time_axis:
@@ -200,7 +204,7 @@ class PQN:
         )
         return (key, state, initial_carry, transitions, lambda_targets), metrics
 
-    def _update_minibatch(self, carry, minibatch):
+    def _update_minibatch(self, carry: tuple, minibatch: tuple):
         key, state = carry
 
         carry, transitions, target = minibatch
@@ -225,7 +229,7 @@ class PQN:
             )
             target = target[:, self.cfg.burn_in_length :]
 
-        def loss_fn(params):
+        def loss_fn(params: PyTree):
             _, (q_values, aux) = self.q_network.apply(
                 params,
                 observation=transitions.first.obs,
@@ -311,21 +315,23 @@ class PQN:
         loss, q_value, q_value_min, q_value_max, q_value_std, td_error, td_error_std = (
             metrics
         )
-        lox.log({
-            "losses/loss": loss,
-            "losses/q_value": q_value,
-            "losses/q_value_min": q_value_min,
-            "losses/q_value_max": q_value_max,
-            "losses/q_value_std": q_value_std,
-            "losses/td_error": td_error,
-            "losses/td_error_std": td_error_std,
-            "losses/epsilon": self.epsilon_schedule(state.step),
-        })
+        lox.log(
+            {
+                "losses/loss": loss,
+                "losses/q_value": q_value,
+                "losses/q_value_min": q_value_min,
+                "losses/q_value_max": q_value_max,
+                "losses/q_value_std": q_value_std,
+                "losses/td_error": td_error,
+                "losses/td_error_std": td_error_std,
+                "losses/epsilon": self.epsilon_schedule(state.step),
+            }
+        )
 
         return (key, state), None
 
     @partial(jax.jit, static_argnames=["self"])
-    def init(self, key) -> tuple[Key, PQNState]:
+    def init(self, key: Key) -> tuple[Key, PQNState]:
         key, env_key, q_key, torso_key = jax.random.split(key, 4)
         env_keys = jax.random.split(env_key, self.cfg.num_envs)
 

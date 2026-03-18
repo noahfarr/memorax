@@ -1,4 +1,4 @@
-from typing import Optional, Tuple, Union
+from typing import Union
 
 from gymnax.environments import environment
 
@@ -16,7 +16,7 @@ class ScaleRewardWrapper(GymnaxWrapper):
         key: Key,
         state: environment.EnvState,
         action: Union[int, float],
-        params: Optional[environment.EnvParams] = None,
-    ) -> Tuple[Array, environment.EnvState, float, bool, dict]:
+        params: environment.EnvParams | None = None,
+    ) -> tuple[Array, environment.EnvState, float, bool, dict]:
         obs, env_state, reward, done, info = self._env.step(key, state, action, params)
         return obs, env_state, self.scale * reward, done, info

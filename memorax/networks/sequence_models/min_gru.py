@@ -1,4 +1,4 @@
-from typing import Optional, Tuple
+from typing import Tuple
 
 import jax
 import jax.numpy as jnp
@@ -23,7 +23,7 @@ class MinGRUCell(MemoroidCellBase):
     features: int
     kernel_init: Initializer = initializers.lecun_normal()
     bias_init: Initializer = initializers.zeros_init()
-    dtype: Optional[Dtype] = None
+    dtype: Dtype | None = None
     param_dtype: Dtype = jnp.float32
 
     def setup(self):

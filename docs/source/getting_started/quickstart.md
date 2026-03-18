@@ -120,7 +120,7 @@ for i in range(0, 500_000, 10_000):
         "training/episode_lengths": episode_lengths,
         **logs,
     }
-    logger.log(data, step=state.step[0].item())
+    logger.log(data, step=state.step.mean().item())
 
 logger.finish()
 ```

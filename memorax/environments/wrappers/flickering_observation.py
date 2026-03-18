@@ -1,4 +1,4 @@
-from typing import Callable, Optional, Tuple, Union
+from typing import Callable, Union
 
 import jax
 import jax.numpy as jnp
@@ -24,8 +24,8 @@ class FlickeringObservationWrapper(GymnaxWrapper):
         key: Key,
         state: environment.EnvState,
         action: Union[int, float],
-        params: Optional[environment.EnvParams] = None,
-    ) -> Tuple[Array, environment.EnvState, float, bool, dict]:
+        params: environment.EnvParams | None = None,
+    ) -> tuple[Array, environment.EnvState, float, bool, dict]:
         key, flicker_key, fill_key = jax.random.split(key, 3)
         obs, state, reward, done, info = self._env.step(key, state, action, params)
         visible = jax.random.uniform(flicker_key) >= self.p

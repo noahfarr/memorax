@@ -2,6 +2,7 @@ import jax.numpy as jnp
 from flax import linen as nn
 
 from memorax.networks.initializers import bounded_uniform, kaiming_uniform
+from memorax.utils.typing import Array
 
 
 class CausalConv1d(nn.Module):
@@ -11,7 +12,7 @@ class CausalConv1d(nn.Module):
     param_dtype: jnp.dtype = jnp.float32
 
     @nn.compact
-    def __call__(self, x: jnp.ndarray, state: jnp.ndarray) -> tuple:
+    def __call__(self, x: Array, state: Array) -> tuple:
         kernel = self.param(
             "kernel",
             kaiming_uniform(),
@@ -38,7 +39,7 @@ class ParallelCausalConv1d(nn.Module):
     dtype: jnp.dtype = jnp.float32
 
     @nn.compact
-    def __call__(self, x: jnp.ndarray):
+    def __call__(self, x: Array):
         *_, feature_group_count = x.shape
         padding = self.kernel_size - 1
         x = nn.Conv(

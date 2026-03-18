@@ -1,8 +1,10 @@
 from typing import Any
 
 from flax import struct
+from gymnax.environments import spaces
 
 from memorax.environments.wrappers import GymnaxWrapper
+from memorax.utils.typing import Array, Key
 
 max_steps_in_episode = {
     "AutoencodeEasy": 105,
@@ -55,26 +57,26 @@ class EnvParams:
 
 
 class PopJymWrapper(GymnaxWrapper):
-    def reset(self, key, params):
+    def reset(self, key: Key, params) -> tuple[Array, Any]:
         return self._env.reset(key, params.env_params)
 
-    def step(self, key, state, action, params):
+    def step(self, key: Key, state, action: Array, params) -> tuple[Array, Any, Array, Array, dict]:
         obs, new_state, reward, done, info = self._env.step(
             key, state, action, params.env_params
         )
         return obs, new_state, reward, done, info
 
-    def observation_space(self, params):
+    def observation_space(self, params) -> spaces.Space:
         return self._env.observation_space(params.env_params)
 
-    def action_space(self, params):
+    def action_space(self, params) -> spaces.Space:
         return self._env.action_space(params.env_params)
 
-    def state_space(self, params):
+    def state_space(self, params) -> spaces.Space:
         return self._env.state_space(params.env_params)
 
 
-def make(env_id, **kwargs):
+def make(env_id: str, **kwargs) -> tuple[PopJymWrapper, EnvParams]:
     import popjym
 
     env, env_params = popjym.make(env_id, **kwargs)

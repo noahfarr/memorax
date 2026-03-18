@@ -1,23 +1,28 @@
 from memorax.environments import (
+    atari,
     brax,
     craftax,
     grimax,
     gxm,
     gymnax,
+    gymnasium,
     jaxmarl,
     mujoco_playground,
     navix,
     pobax,
     popgym_arcade,
     popjym,
+    pufferlib,
     xminigrid,
 )
 
 register = {
+    "atari": atari.make,
     "brax": brax.make,
     "craftax": craftax.make,
     "grimax": grimax.make,
     "gymnax": gymnax.make,
+    "gymnasium": gymnasium.make,
     "gxm": gxm.make,
     "jaxmarl": jaxmarl.make,
     "mujoco_playground": mujoco_playground.make,
@@ -25,6 +30,7 @@ register = {
     "pobax": pobax.make,
     "popgym_arcade": popgym_arcade.make,
     "popjym": popjym.make,
+    "pufferlib": pufferlib.make,
     "xminigrid": xminigrid.make,
 }
 
@@ -32,7 +38,7 @@ register = {
 def make(
     env_id,
     **kwargs,
-):
+) -> tuple:
     namespace, env_id = env_id.split("::", 1)
 
     if namespace not in register:

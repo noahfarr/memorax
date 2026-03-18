@@ -4,6 +4,7 @@ from flax.struct import dataclass
 from gymnax.environments import spaces
 
 from memorax.environments.wrappers import GymnaxWrapper
+from memorax.utils.typing import Array, Key
 
 
 class PixelCraftaxEnvWrapper(GymnaxWrapper):
@@ -15,26 +16,26 @@ class PixelCraftaxEnvWrapper(GymnaxWrapper):
         self.normalize = normalize
         self.size = 110
 
-    def reset(self, key, params):
+    def reset(self, key: Key, params) -> tuple[Array, Any]:
         image_obs, env_state = self._env.reset(key, params)
         image_obs = self.get_obs(image_obs, self.normalize)
         return image_obs, env_state
 
-    def step(self, key, state, action, params):
+    def step(self, key: Key, state, action: Array, params) -> tuple[Array, Any, Array, Array, dict]:
         image_obs, env_state, reward, done, info = self._env.step(
             key, state, action, params
         )
         image_obs = self.get_obs(image_obs, self.normalize)
         return image_obs, env_state, reward, done, info
 
-    def get_obs(self, obs, normalize):
+    def get_obs(self, obs, normalize) -> Array:
         if not normalize:
             obs *= 255
         assert len(obs.shape) == 4
         obs = obs[:27, :, :]
         return obs
 
-    def observation_space(self, params):
+    def observation_space(self, params) -> spaces.Box:
         low, high = 0, 255
         if self.normalize:
             high = 1
@@ -50,10 +51,10 @@ class PixelCraftaxEnvWrapper(GymnaxWrapper):
 
 
 class CraftaxWrapper(GymnaxWrapper):
-    def reset(self, key, params):
+    def reset(self, key: Key, params) -> tuple[Array, Any]:
         return self._env.reset(key, params.env_params)
 
-    def step(self, key, state, action, params):
+    def step(self, key: Key, state, action: Array, params) -> tuple[Array, Any, Array, Array, dict]:
         obs, new_state, reward, done, info = self._env.step(
             key, state, action, params.env_params
         )
@@ -66,7 +67,7 @@ class EnvParams:
     max_steps_in_episode: int
 
 
-def make(env_id, **kwargs):
+def make(env_id: str, **kwargs) -> tuple:
     from craftax import craftax_env
 
     env = craftax_env.make_craftax_env_from_name(env_id, **kwargs)

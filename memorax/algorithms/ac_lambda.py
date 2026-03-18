@@ -14,7 +14,7 @@ from memorax.utils.axes import (
     remove_time_axis,
 )
 from memorax.utils import Timestep, Transition
-from memorax.utils.typing import Array, Discrete, Environment, EnvParams, EnvState, Key
+from memorax.utils.typing import Array, Discrete, Environment, EnvParams, EnvState, Key, Carry, PyTree
 
 
 @struct.dataclass(frozen=True)
@@ -156,7 +156,7 @@ class ACLambda:
         )
         return (key, state), transition
 
-    def _obgd_update(self, traces, td_error, lr, kappa):
+    def _obgd_update(self, traces: PyTree, td_error: Array, lr: float, kappa: float):
         z_leaves = jax.tree.leaves(traces)
         z_sum = sum(
             jnp.sum(jnp.abs(z), axis=tuple(range(1, z.ndim))) for z in z_leaves
@@ -164,7 +164,7 @@ class ACLambda:
         delta_bar = jnp.maximum(jnp.abs(td_error), 1.0)
         step_size = lr / jnp.maximum(1.0, delta_bar * z_sum * lr * kappa)
 
-        def compute_update(z):
+        def compute_update(z: Array):
             n_trailing = z.ndim - 1
             ss = step_size[(slice(None),) + (None,) * n_trailing]
             delta = td_error[(slice(None),) + (None,) * n_trailing]
@@ -231,7 +231,7 @@ class ACLambda:
         initial_actor_carry = jax.lax.stop_gradient(state.actor_carry)
         initial_critic_carry = jax.lax.stop_gradient(state.critic_carry)
 
-        def critic_loss_fn(params):
+        def critic_loss_fn(params: PyTree):
             _, (v, _) = self.critic_network.apply(
                 params,
                 observation=timestep.obs,
@@ -242,7 +242,7 @@ class ACLambda:
             )
             return remove_feature_axis(remove_time_axis(v))
 
-        def actor_loss_fn(params):
+        def actor_loss_fn(params: PyTree):
             _, (dist, _) = self.actor_network.apply(
                 params,
                 observation=timestep.obs,
@@ -260,7 +260,7 @@ class ACLambda:
 
         trace_decay = gamma * self.cfg.trace_lambda
 
-        def update_trace(z, g):
+        def update_trace(z: Array, g: Array):
             n_trailing = z.ndim - 1
             not_done = (1 - state.timestep.done)[(slice(None),) + (None,) * n_trailing]
             return trace_decay * not_done * z + g

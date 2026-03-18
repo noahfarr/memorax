@@ -1,5 +1,5 @@
 from abc import abstractmethod
-from typing import Dict, Mapping, Optional, Tuple
+from typing import Mapping
 
 import jax
 import jax.numpy as jnp
@@ -14,7 +14,7 @@ from memorax.utils.axes import (
     get_time_axis_and_input_shape,
     reset_carry,
 )
-from memorax.utils.typing import Array, Carry
+from memorax.utils.typing import Array, Carry, Key
 
 from .sequence_model import SequenceModel
 
@@ -22,10 +22,10 @@ from .sequence_model import SequenceModel
 class RNNCellBase(nn.recurrent.RNNCellBase):
     @abstractmethod
     def local_jacobian(
-        self, carry: Carry, inputs: Array, sensitivity: Dict[str, Array], **kwargs
-    ) -> Tuple[Carry, Array, Dict[str, Array]]: ...
+        self, carry: Carry, inputs: Array, sensitivity: dict[str, Array], **kwargs
+    ) -> tuple[Carry, Array, dict[str, Array]]: ...
 
-    def compute_phantom(self, sensitivity: Dict[str, Array]) -> Array:
+    def compute_phantom(self, sensitivity: dict[str, Array]) -> Array:
         params = self.variables["params"]
         phantom = 0
         for name, S in sensitivity.items():
@@ -41,8 +41,8 @@ class RNNCellBase(nn.recurrent.RNNCellBase):
 
     @abstractmethod
     def initialize_sensitivity(
-        self, key: jax.Array, input_shape: Tuple[int, ...]
-    ) -> Optional[Dict[str, Array]]: ...
+        self, key: jax.Array, input_shape: tuple[int, ...]
+    ) -> dict[str, Array] | None: ...
 
 
 class RNN(SequenceModel):
@@ -57,9 +57,9 @@ class RNN(SequenceModel):
         self,
         inputs: Array,
         done: Array,
-        initial_carry: Optional[Carry] = None,
+        initial_carry: Carry | None = None,
         **kwargs,
-    ) -> Tuple[Carry, Array]:
+    ) -> tuple[Carry, Array]:
         time_axis, input_shape = get_time_axis_and_input_shape(inputs)
 
         if initial_carry is None:
@@ -90,10 +90,10 @@ class RNN(SequenceModel):
         return carry, outputs
 
     @nn.nowrap
-    def initialize_carry(self, key: jax.Array, input_shape: Tuple[int, ...]) -> Carry:
+    def initialize_carry(self, key: jax.Array, input_shape: tuple[int, ...]) -> Carry:
         return self.cell.initialize_carry(key, input_shape)
 
-    def local_jacobian(self, inputs, done, carry, sensitivity=None, **kwargs):
+    def local_jacobian(self, inputs: Array, done: Array, carry: Carry, sensitivity: dict[str, Array] | None = None, **kwargs) -> tuple[Carry, Array, dict[str, Array] | None]:
         if sensitivity is None:
             next_carry, y = self(inputs, done, carry, **kwargs)
             return next_carry, y, None
@@ -137,5 +137,5 @@ class RNN(SequenceModel):
 
         return next_carry, outputs, next_sensitivity
 
-    def initialize_sensitivity(self, key, input_shape):
+    def initialize_sensitivity(self, key: Key, input_shape: tuple) -> dict[str, Array] | None:
         return self.cell.initialize_sensitivity(key, input_shape)

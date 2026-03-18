@@ -1,5 +1,3 @@
-from typing import Optional
-
 import jax
 import jax.numpy as jnp
 from flax import linen as nn
@@ -14,7 +12,7 @@ def _check_positions(positions, num_embeddings):
         )
 
 
-from memorax.utils.typing import Array, Carry
+from memorax.utils.typing import Array, Carry, Key
 
 from .base import AbsolutePositionalEmbedding
 
@@ -24,7 +22,7 @@ class LearnablePositionalEmbedding(AbsolutePositionalEmbedding, nn.Module):
     features: int
 
     @nn.nowrap
-    def initialize_carry(self, key, input_shape) -> Carry:
+    def initialize_carry(self, key: Key, input_shape: tuple) -> Carry:
         *batch_dims, _ = input_shape
         return jnp.zeros(batch_dims, dtype=jnp.int32)
 
@@ -33,7 +31,7 @@ class LearnablePositionalEmbedding(AbsolutePositionalEmbedding, nn.Module):
         self,
         inputs: Array,
         done: Array,
-        initial_carry: Optional[Carry] = None,
+        initial_carry: Carry | None = None,
         **kwargs,
     ) -> tuple[Array, Carry]:
         batch_size = inputs.shape[0]

@@ -1,4 +1,4 @@
-from typing import Any, Optional
+from typing import Any
 
 import jax.numpy as jnp
 from gymnax.environments import spaces
@@ -17,7 +17,7 @@ class GxmGymnaxWrapper(GymnaxWrapper):
         key: Key,
         state: Array,
         action: Array,
-        params: Optional[EnvParams] = None,
+        params: EnvParams | None = None,
     ) -> tuple[Array, Array, Array, Array, dict[str, Any]]:
         del params
         next_state, timestep = self._env.step(key, state, action)
@@ -30,17 +30,17 @@ class GxmGymnaxWrapper(GymnaxWrapper):
         )
 
     def reset(
-        self, key: Key, params: Optional[EnvParams] = None
+        self, key: Key, params: EnvParams | None = None
     ) -> tuple[Array, Array]:
         del params
         state, timestep = self._env.init(key)
         return timestep.obs, state
 
-    def action_space(self, params: Optional[EnvParams] = None) -> spaces.Space:
+    def action_space(self, params: EnvParams | None = None) -> spaces.Space:
         del params
         return self._gxm_to_gymnax_space(self._env.action_space)
 
-    def observation_space(self, params: Optional[EnvParams] = None) -> spaces.Space:
+    def observation_space(self, params: EnvParams | None = None) -> spaces.Space:
         del params
         return self._env.env.observation_space(self._env.env_params)
 
@@ -63,7 +63,7 @@ class GxmGymnaxWrapper(GymnaxWrapper):
         raise NotImplementedError(f"Gxm space type {type(space)} not supported.")
 
 
-def make(env_id, **kwargs):
+def make(env_id: str, **kwargs) -> tuple:
     import gxm
 
     env = gxm.make(env_id, **kwargs)

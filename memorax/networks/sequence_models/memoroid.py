@@ -1,7 +1,5 @@
 import math
 from abc import abstractmethod
-from typing import Optional, Tuple
-
 import jax
 import jax.numpy as jnp
 from flax import linen as nn
@@ -14,7 +12,7 @@ from memorax.utils.axes import (
     last,
     tail,
 )
-from memorax.utils.typing import Array, Carry
+from memorax.utils.typing import Array, Carry, Key
 
 from .sequence_model import SequenceModel
 
@@ -31,13 +29,13 @@ class MemoroidCellBase(nn.Module):
 
     @abstractmethod
     def initialize_carry(
-        self, key: jax.Array, input_shape: Tuple[int, ...]
+        self, key: jax.Array, input_shape: tuple[int, ...]
     ) -> Carry: ...
 
-    def local_jacobian(self, carry, z, inputs, **kwargs):
+    def local_jacobian(self, carry: Carry, z: Carry, inputs: Array, **kwargs) -> tuple[Array, dict] | None:
         return None
 
-    def compute_phantom(self, sensitivity):
+    def compute_phantom(self, sensitivity: dict) -> Array:
         params = self.variables["params"]
         phantom = 0
         for name, S in sensitivity.items():
@@ -48,11 +46,11 @@ class MemoroidCellBase(nn.Module):
             phantom = phantom + jnp.sum(S * diff, axis=tuple(range(3, S.ndim)))
         return phantom
 
-    def inject_phantom(self, carry, phantom):
+    def inject_phantom(self, carry: Carry, phantom: Array) -> Carry:
         state, *rest = carry
         return (jax.lax.stop_gradient(state) + phantom, *rest)
 
-    def initialize_sensitivity(self, key, input_shape):
+    def initialize_sensitivity(self, key: Key, input_shape: tuple) -> dict | None:
         return None
 
 
@@ -97,9 +95,9 @@ class Memoroid(SequenceModel):
         self,
         inputs: Array,
         done: Array,
-        initial_carry: Optional[Carry] = None,
+        initial_carry: Carry | None = None,
         **kwargs,
-    ) -> Tuple[Carry, Array]:
+    ) -> tuple[Carry, Array]:
         if initial_carry is None:
             input_shape = get_input_shape(inputs)
             initial_carry = self.cell.initialize_carry(jax.random.key(0), input_shape)
@@ -110,10 +108,10 @@ class Memoroid(SequenceModel):
 
         return next_carry, y
 
-    def initialize_carry(self, key: jax.Array, input_shape: Tuple[int, ...]) -> Carry:
+    def initialize_carry(self, key: jax.Array, input_shape: tuple[int, ...]) -> Carry:
         return self.cell.initialize_carry(key, input_shape)
 
-    def _propagate_sensitivities(self, decay, jacobians, sensitivity, done):
+    def _propagate_sensitivities(self, decay: Array, jacobians: dict, sensitivity: dict, done: Array) -> dict:
         B, T, H = decay.shape
         done = add_feature_axis(done)
         next_sensitivity = {}
@@ -143,7 +141,7 @@ class Memoroid(SequenceModel):
         return next_sensitivity
 
     @nn.compact
-    def local_jacobian(self, inputs, done, carry, sensitivity=None, **kwargs):
+    def local_jacobian(self, inputs: Array, done: Array, carry: Carry, sensitivity: dict | None = None, **kwargs) -> tuple[Carry, Array, dict | None]:
         z = self.cell(inputs, **kwargs)
 
         if sensitivity is not None:
@@ -177,5 +175,5 @@ class Memoroid(SequenceModel):
 
         return next_carry, y, next_sensitivity
 
-    def initialize_sensitivity(self, key: jax.Array, input_shape: Tuple[int, ...]):
+    def initialize_sensitivity(self, key: jax.Array, input_shape: tuple[int, ...]) -> dict | None:
         return self.cell.initialize_sensitivity(key, input_shape)

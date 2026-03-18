@@ -1,4 +1,4 @@
-from typing import Optional
+from typing import Self
 
 import jax
 from flax import struct
@@ -10,13 +10,13 @@ from memorax.utils.typing import PyTree
 
 @struct.dataclass(frozen=True)
 class Transition:
-    first: Optional[Timestep] = None
-    second: Optional[Timestep] = None
-    carry: Optional[PyTree] = None
-    aux: Optional[PyTree] = None
+    first: Timestep | None = None
+    second: Timestep | None = None
+    carry: PyTree | None = None
+    aux: PyTree | None = None
 
-    def to_sequence(self):
+    def to_sequence(self) -> Self:
         return jax.tree.map(add_time_axis, self)
 
-    def from_sequence(self):
+    def from_sequence(self) -> Self:
         return jax.tree.map(remove_time_axis, self)

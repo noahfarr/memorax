@@ -3,6 +3,7 @@ import jax.numpy as jnp
 
 from memorax.networks.blocks import FFN
 from memorax.networks.identity import Identity
+from memorax.utils.typing import Array
 
 
 class PatchEmbedding(nn.Module):
@@ -12,7 +13,7 @@ class PatchEmbedding(nn.Module):
     features: int = 768
 
     @nn.compact
-    def __call__(self, x: jnp.ndarray, **kwargs) -> jnp.ndarray:
+    def __call__(self, x: Array, **kwargs) -> Array:
         x = nn.Conv(
             self.features,
             kernel_size=(self.patch_size, self.patch_size),
@@ -39,7 +40,7 @@ class ViT(nn.Module):
     patch_embedding: nn.Module = Identity()
 
     @nn.compact
-    def __call__(self, x: jnp.ndarray, **kwargs) -> jnp.ndarray:
+    def __call__(self, x: Array, **kwargs) -> Array:
         batch_size, sequence_length, *_ = x.shape
         x = x.reshape(batch_size * sequence_length, *x.shape[2:])
 

@@ -25,4 +25,5 @@ from .record_episode_statistics import (
     RecordEpisodeStatistics,
     RecordEpisodeStatisticsState,
 )
+from .bsuite import BSuiteEnvState, BSuiteWrapper
 from .scale_reward import ScaleRewardWrapper

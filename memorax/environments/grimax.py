@@ -1,4 +1,4 @@
-def make(env_id, **kwargs):
+def make(env_id: str, **kwargs) -> tuple:
     import grimax
     from grimax.wrappers import AutoResetWrapper, GrimaxGymnaxWrapper
 

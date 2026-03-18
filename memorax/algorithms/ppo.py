@@ -1,5 +1,5 @@
 from functools import partial
-from typing import Any, Callable, Optional
+from typing import Any, Callable
 
 import flax.linen as nn
 import jax
@@ -8,12 +8,18 @@ import lox
 import optax
 from flax import core, struct
 
-from memorax.utils.axes import (add_feature_axis,
-                                remove_feature_axis,
-                                remove_time_axis)
 from memorax.utils import Timestep, Transition
-from memorax.utils.typing import (Array, Discrete, Environment, EnvParams,
-                                  EnvState, Key)
+from memorax.utils.axes import add_feature_axis, remove_feature_axis, remove_time_axis
+from memorax.utils.typing import (
+    Array,
+    Carry,
+    Discrete,
+    Environment,
+    EnvParams,
+    EnvState,
+    Key,
+    PyTree,
+)
 
 
 @struct.dataclass(frozen=True)
@@ -27,7 +33,7 @@ class PPOConfig:
     clip_coefficient: float
     clip_value_loss: bool
     entropy_coefficient: float
-    target_kl: Optional[float] = None
+    target_kl: float | None = None
     burn_in_length: int = 0
 
     @property
@@ -132,7 +138,7 @@ class PPO:
         )
         return key, state, action, log_prob, value, intermediates
 
-    def _generalized_advantage_estimation(self, carry, transition):
+    def _generalized_advantage_estimation(self, carry: tuple, transition: Transition):
         advantage, next_value = carry
         delta = (
             self.critic_network.head.get_target(transition, next_value)
@@ -147,7 +153,9 @@ class PPO:
         )
         return (advantage, transition.aux["value"]), advantage
 
-    def _step(self, carry: tuple, _, *, policy: Callable):
+    def _step(
+        self, carry: tuple, _, *, policy: Callable
+    ) -> tuple[tuple[Key, PPOState], Transition]:
         key, state = carry
 
         key, action_key, step_key = jax.random.split(key, 3)
@@ -204,8 +212,8 @@ class PPO:
         return (key, state), transition
 
     def _update_actor(
-        self, key, state: PPOState, initial_actor_carry, transitions, advantages
-    ):
+        self, key: Key, state: PPOState, initial_actor_carry: Carry, transitions: Transition, advantages: Array
+    ) -> tuple[Key, PPOState, Array, tuple[Array, Array, Array]]:
         key, torso_key, dropout_key = jax.random.split(key, 3)
 
         if self.cfg.burn_in_length > 0:
@@ -226,7 +234,7 @@ class PPO:
             )
             advantages = advantages[:, self.cfg.burn_in_length :]
 
-        def actor_loss_fn(params):
+        def actor_loss_fn(params: PyTree):
             _, (probs, _) = self.actor_network.apply(
                 params,
                 observation=transitions.first.obs,
@@ -274,8 +282,8 @@ class PPO:
         return key, state, actor_loss.mean(), aux
 
     def _update_critic(
-        self, key, state: PPOState, initial_critic_carry, transitions, returns
-    ):
+        self, key: Key, state: PPOState, initial_critic_carry: Carry, transitions: Transition, returns: Array
+    ) -> tuple[Key, PPOState, Array]:
         key, torso_key, dropout_key = jax.random.split(key, 3)
 
         if self.cfg.burn_in_length > 0:
@@ -296,7 +304,7 @@ class PPO:
             )
             returns = returns[:, self.cfg.burn_in_length :]
 
-        def critic_loss_fn(params):
+        def critic_loss_fn(params: PyTree):
             _, (values, aux) = self.critic_network.apply(
                 params,
                 observation=transitions.first.obs,
@@ -338,7 +346,9 @@ class PPO:
         )
         return key, state, critic_loss.mean()
 
-    def _update_minibatch(self, carry, minibatch: tuple):
+    def _update_minibatch(
+        self, carry, minibatch: tuple
+    ) -> tuple[tuple[Key, PPOState], tuple[Array, Array, tuple[Array, Array, Array]]]:
         key, state = carry
         (
             initial_actor_carry,
@@ -357,7 +367,17 @@ class PPO:
 
         return (key, state), (actor_loss, critic_loss, aux)
 
-    def _update_epoch(self, carry: tuple):
+    def _update_epoch(self, carry: tuple) -> tuple[
+        Key,
+        PPOState,
+        Carry,
+        Carry,
+        Transition,
+        Array,
+        Array,
+        tuple[Array, Array, Array, Array, Array],
+        int,
+    ]:
         (
             key,
             state,
@@ -380,7 +400,7 @@ class PPO:
             returns,
         )
 
-        def shuffle(batch):
+        def shuffle(batch: PyTree):
             shuffle_time_axis = (
                 initial_actor_carry is None or initial_critic_carry is None
             )
@@ -408,16 +428,19 @@ class PPO:
 
         minibatches = shuffle(batch)
 
-        (key, state), (actor_loss, critic_loss, (entropy, approximate_kl, clip_fraction)) = (
-            jax.lax.scan(
-                self._update_minibatch,
-                (key, state),
-                minibatches,
-            )
+        (key, state), (
+            actor_loss,
+            critic_loss,
+            (entropy, approximate_kl, clip_fraction),
+        ) = jax.lax.scan(
+            self._update_minibatch,
+            (key, state),
+            minibatches,
         )
 
         metrics = jax.tree.map(
-            lambda x: x.mean(), (actor_loss, critic_loss, entropy, approximate_kl, clip_fraction)
+            lambda x: x.mean(),
+            (actor_loss, critic_loss, entropy, approximate_kl, clip_fraction),
         )
 
         return (
@@ -432,7 +455,7 @@ class PPO:
             epoch + 1,
         )
 
-    def _update_step(self, carry: tuple, _):
+    def _update_step(self, carry: tuple, _) -> tuple[tuple[Key, PPOState], None]:
         key, state = carry
         initial_actor_carry = state.actor_carry
         initial_critic_carry = state.critic_carry
@@ -498,18 +521,20 @@ class PPO:
         )
 
         actor_loss, critic_loss, entropy, approximate_kl, clip_fraction = metrics
-        lox.log({
-            "losses/actor_loss": actor_loss,
-            "losses/critic_loss": critic_loss,
-            "losses/entropy": entropy,
-            "losses/approximate_kl": approximate_kl,
-            "losses/clip_fraction": clip_fraction,
-        })
+        lox.log(
+            {
+                "losses/actor_loss": actor_loss,
+                "losses/critic_loss": critic_loss,
+                "losses/entropy": entropy,
+                "losses/approximate_kl": approximate_kl,
+                "losses/clip_fraction": clip_fraction,
+            }
+        )
 
         return (key, state), None
 
     @partial(jax.jit, static_argnames=["self"])
-    def init(self, key):
+    def init(self, key: Key) -> tuple[Key, PPOState]:
         (
             key,
             env_key,
@@ -585,7 +610,7 @@ class PPO:
         return key, state
 
     @partial(jax.jit, static_argnames=["self", "num_steps"])
-    def train(self, key: Key, state: PPOState, num_steps: int):
+    def train(self, key: Key, state: PPOState, num_steps: int) -> tuple[Key, PPOState]:
         (key, state), _ = jax.lax.scan(
             self._update_step,
             (key, state),
@@ -595,7 +620,9 @@ class PPO:
         return key, state
 
     @partial(jax.jit, static_argnames=["self", "num_steps", "deterministic"])
-    def evaluate(self, key: Key, state: PPOState, num_steps: int, deterministic=True):
+    def evaluate(
+        self, key: Key, state: PPOState, num_steps: int, deterministic=True
+    ) -> tuple[Key, Transition]:
         key, reset_key = jax.random.split(key)
         reset_key = jax.random.split(reset_key, self.cfg.num_envs)
         obs, env_state = jax.vmap(self.env.reset, in_axes=(0, None))(

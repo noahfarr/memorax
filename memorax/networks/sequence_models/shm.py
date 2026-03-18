@@ -1,6 +1,4 @@
 from functools import partial
-from typing import Optional, Tuple
-
 import jax
 import jax.numpy as jnp
 from flax import linen as nn
@@ -25,7 +23,7 @@ class SHMCell(RNNCellBase):
     kernel_init: Initializer = nn.initializers.lecun_normal()
     bias_init: Initializer = initializers.zeros_init()
     theta_init: Initializer = xavier_uniform()
-    dtype: Optional[Dtype] = None
+    dtype: Dtype | None = None
     param_dtype: Dtype = jnp.float32
     carry_init: Initializer = initializers.zeros_init()
 
@@ -57,7 +55,7 @@ class SHMCell(RNNCellBase):
         )
         self.output_projection = nn.Dense(self.output_features)
 
-    def __call__(self, carry: Array, inputs: Array) -> Tuple[Array, Array]:
+    def __call__(self, carry: Array, inputs: Array) -> tuple[Array, Array]:
         inputs = self.ln(inputs)
 
         value = self.value(inputs)
@@ -91,7 +89,7 @@ class SHMCell(RNNCellBase):
         return M, y
 
     @nn.nowrap
-    def initialize_carry(self, key: jax.Array, input_shape: Tuple[int, ...]) -> Array:
+    def initialize_carry(self, key: jax.Array, input_shape: tuple[int, ...]) -> Array:
         batch_dims = input_shape[:-1]
         mem_shape = batch_dims + (self.features, self.features)
         return self.carry_init(key, mem_shape, self.param_dtype)

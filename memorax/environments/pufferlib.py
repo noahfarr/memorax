@@ -1,5 +1,3 @@
-from typing import Tuple
-
 import jax
 import jax.numpy as jnp
 import numpy as np
@@ -27,10 +25,10 @@ class PufferLibWrapper:
         self.num_actions = env.single_action_space.n
 
     @property
-    def default_params(self):
+    def default_params(self) -> None:
         return None
 
-    def reset(self, key: Key, params=None) -> Tuple[Array, PufferLibEnvState]:
+    def reset(self, key: Key, params=None) -> tuple[Array, PufferLibEnvState]:
 
         def _reset(key):
             obs, _ = self._env.reset()
@@ -52,7 +50,7 @@ class PufferLibWrapper:
         state: PufferLibEnvState,
         action: Array,
         params=None,
-    ) -> Tuple[Array, PufferLibEnvState, Array, Array, dict]:
+    ) -> tuple[Array, PufferLibEnvState, Array, Array, dict]:
 
         def _step(action):
             action = np.asarray(action, dtype=np.int32)
@@ -88,3 +86,10 @@ class PufferLibWrapper:
 
     def action_space(self, params=None) -> spaces.Discrete:
         return spaces.Discrete(self.num_actions)
+
+
+def make(env_id, env_creator, num_envs=1, **kwargs) -> tuple:
+    import pufferlib.vector
+
+    environment = pufferlib.vector.make(env_creator, num_envs=num_envs, **kwargs)
+    return PufferLibWrapper(environment), None

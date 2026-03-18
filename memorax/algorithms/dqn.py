@@ -19,10 +19,12 @@ from memorax.utils.typing import (
     Array,
     Buffer,
     BufferState,
+    Carry,
     Environment,
     EnvParams,
     EnvState,
     Key,
+    PyTree,
 )
 
 
@@ -101,7 +103,7 @@ class DQN:
         )
         return key, state, action, intermediates
 
-    def _step(self, carry, _, *, policy: Callable):
+    def _step(self, carry: tuple, _, *, policy: Callable) -> tuple[tuple[Key, DQNState], Transition]:
         key, state = carry
 
         initial_carry = state.carry
@@ -161,7 +163,7 @@ class DQN:
         )
         return (key, state), transition
 
-    def _update(self, key: Key, state: DQNState):
+    def _update(self, key: Key, state: DQNState) -> DQNState:
         batch = self.buffer.sample(state.buffer_state, key)
 
         key, torso_key, next_torso_key = jax.random.split(key, 3)
@@ -214,7 +216,7 @@ class DQN:
 
         td_target = self.q_network.head.get_target(experience, next_target_q_value)
 
-        def loss_fn(params):
+        def loss_fn(params: PyTree):
             carry, (q_values, aux) = self.q_network.apply(
                 params,
                 observation=experience.first.obs,
@@ -258,7 +260,7 @@ class DQN:
 
         return state
 
-    def _update_step(self, carry, _):
+    def _update_step(self, carry: tuple, _) -> tuple[tuple[Key, DQNState], None]:
         key, state = carry
         (key, state), _ = jax.lax.scan(
             partial(self._step, policy=self._epsilon_greedy_action),
@@ -272,7 +274,7 @@ class DQN:
         return (key, state), None
 
     @partial(jax.jit, static_argnames=["self"])
-    def init(self, key):
+    def init(self, key: Key) -> tuple[Key, DQNState]:
         key, env_key, q_key, torso_key = jax.random.split(key, 4)
         env_keys = jax.random.split(env_key, self.cfg.num_envs)
 
@@ -337,7 +339,7 @@ class DQN:
         key: Key,
         state: DQNState,
         num_steps: int,
-    ):
+    ) -> tuple[Key, DQNState]:
         (key, state), _ = jax.lax.scan(
             self._update_step,
             (key, state),
@@ -347,7 +349,7 @@ class DQN:
         return key, state
 
     @partial(jax.jit, static_argnames=["self", "num_steps"])
-    def evaluate(self, key: Key, state: DQNState, num_steps: int):
+    def evaluate(self, key: Key, state: DQNState, num_steps: int) -> Key:
         key, reset_key = jax.random.split(key)
         reset_key = jax.random.split(reset_key, self.cfg.num_envs)
         obs, env_state = jax.vmap(self.env.reset, in_axes=(0, None))(

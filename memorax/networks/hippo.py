@@ -1,16 +1,16 @@
-from typing import Tuple
-
 import jax.numpy as jnp
 
+from memorax.utils.typing import Array
 
-def make_hippo(n: int) -> jnp.ndarray:
+
+def make_hippo(n: int) -> Array:
     p = jnp.sqrt(1.0 + 2.0 * jnp.arange(n))
     a = p[:, None] * p[None, :]
     a = jnp.tril(a) - jnp.diag(jnp.arange(n))
     return -a
 
 
-def make_nplr_hippo(n: int) -> Tuple[jnp.ndarray, jnp.ndarray, jnp.ndarray]:
+def make_nplr_hippo(n: int) -> tuple[Array, Array, Array]:
     a = make_hippo(n)
     p = jnp.sqrt(jnp.arange(n) + 0.5)
     b = jnp.sqrt(2.0 * jnp.arange(n) + 1.0)
@@ -19,7 +19,7 @@ def make_nplr_hippo(n: int) -> Tuple[jnp.ndarray, jnp.ndarray, jnp.ndarray]:
 
 def make_dplr_hippo(
     n: int,
-) -> Tuple[jnp.ndarray, jnp.ndarray, jnp.ndarray, jnp.ndarray, jnp.ndarray]:
+) -> tuple[Array, Array, Array, Array, Array]:
     a, p, b = make_nplr_hippo(n)
     s = a + p[:, None] * p[None, :]
     s_diag = jnp.diag(s)
@@ -32,8 +32,8 @@ def make_dplr_hippo(
 
 
 def discretize_bilinear(
-    lam: jnp.ndarray, b_tilde: jnp.ndarray, delta: jnp.ndarray
-) -> Tuple[jnp.ndarray, jnp.ndarray]:
+    lam: Array, b_tilde: Array, delta: Array
+) -> tuple[Array, Array]:
     ident = jnp.ones(lam.shape[0], dtype=jnp.complex64)
     bl = 1.0 / (ident - (delta / 2.0) * lam)
     lambda_bar = bl * (ident + (delta / 2.0) * lam)
@@ -42,8 +42,8 @@ def discretize_bilinear(
 
 
 def discretize_zoh(
-    lam: jnp.ndarray, b_tilde: jnp.ndarray, delta: jnp.ndarray
-) -> Tuple[jnp.ndarray, jnp.ndarray]:
+    lam: Array, b_tilde: Array, delta: Array
+) -> tuple[Array, Array]:
     ident = jnp.ones(lam.shape[0], dtype=jnp.complex64)
     lambda_bar = jnp.exp(lam * delta)
     b_bar = (1.0 / lam * (lambda_bar - ident))[..., None] * b_tilde

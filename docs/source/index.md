@@ -107,6 +107,7 @@ getting_started/concepts
 guides/algorithms
 guides/networks
 guides/sequence_models
+guides/sharp_bits
 ```
 
 ```{toctree}

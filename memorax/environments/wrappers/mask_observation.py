@@ -1,4 +1,4 @@
-from typing import Optional, Tuple, Union
+from typing import Union
 
 import jax.numpy as jnp
 from gymnax.environments import environment, spaces
@@ -32,8 +32,8 @@ class MaskObservationWrapper(GymnaxWrapper):
         )
 
     def reset(
-        self, key: Key, params: Optional[environment.EnvParams] = None
-    ) -> Tuple[Array, environment.EnvState]:
+        self, key: Key, params: environment.EnvParams | None = None
+    ) -> tuple[Array, environment.EnvState]:
         obs, state = self._env.reset(key, params)
         obs = obs[self.mask_dims]
         return obs, state
@@ -43,8 +43,8 @@ class MaskObservationWrapper(GymnaxWrapper):
         key: Key,
         state: environment.EnvState,
         action: Union[int, float],
-        params: Optional[environment.EnvParams] = None,
-    ) -> Tuple[Array, environment.EnvState, float, bool, dict]:
+        params: environment.EnvParams | None = None,
+    ) -> tuple[Array, environment.EnvState, float, bool, dict]:
         obs, state, reward, done, info = self._env.step(key, state, action, params)
         obs = obs[self.mask_dims]
         return obs, state, reward, done, info

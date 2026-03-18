@@ -1,5 +1,5 @@
 from functools import partial
-from typing import Optional, Tuple
+from typing import Tuple
 
 import jax
 import jax.numpy as jnp
@@ -35,7 +35,7 @@ class FFMCell(MemoroidCellBase):
     beta: float = 0.01
     kernel_init: Initializer = default_kernel_init
     bias_init: Initializer = initializers.zeros_init()
-    dtype: Optional[Dtype] = None
+    dtype: Dtype | None = None
     param_dtype: Dtype = jnp.float32
 
     def setup(self):

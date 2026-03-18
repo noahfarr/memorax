@@ -1,5 +1,5 @@
 from functools import partial
-from typing import Literal, Optional, Tuple
+from typing import Literal
 
 import jax
 import jax.numpy as jnp
@@ -9,7 +9,7 @@ from flax.typing import Dtype, Initializer
 
 from memorax.networks.positional_embeddings import RelativePositionalEmbedding
 from memorax.utils.axes import get_input_shape
-from memorax.utils.typing import Array
+from memorax.utils.typing import Array, Key
 
 Implementation = Literal["xla", "cudnn"]
 
@@ -119,7 +119,7 @@ class SelfAttention(SequenceModel):
         )
 
     @nn.nowrap
-    def initialize_carry(self, key, input_shape):
+    def initialize_carry(self, key: Key, input_shape: tuple) -> Carry:
         *batch_dims, _ = input_shape
         head_dim = self.features // self.num_heads
         done = jnp.ones((*batch_dims, self.context_length), dtype=jnp.int32)
@@ -137,11 +137,11 @@ class SelfAttention(SequenceModel):
         self,
         x,
         done,
-        initial_carry: Optional[Carry] = None,
-        memory: Optional[Array] = None,
-        memory_done: Optional[Array] = None,
+        initial_carry: Carry | None = None,
+        memory: Array | None = None,
+        memory_done: Array | None = None,
         **kwargs,
-    ) -> Tuple[Carry, Array]:
+    ) -> tuple[Carry, Array]:
         if initial_carry is None:
             input_shape = get_input_shape(x)
             initial_carry = self.initialize_carry(jax.random.key(0), input_shape)

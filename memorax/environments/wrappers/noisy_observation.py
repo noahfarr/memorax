@@ -1,4 +1,4 @@
-from typing import Callable, Optional, Tuple, Union
+from typing import Callable, Union
 
 import jax
 import jax.numpy as jnp
@@ -26,8 +26,8 @@ class NoisyObservationWrapper(GymnaxWrapper):
         return obs + noise
 
     def reset(
-        self, key: Key, params: Optional[environment.EnvParams] = None
-    ) -> Tuple[Array, environment.EnvState]:
+        self, key: Key, params: environment.EnvParams | None = None
+    ) -> tuple[Array, environment.EnvState]:
         key, noise_key = jax.random.split(key)
         obs, state = self._env.reset(key, params)
         return self._add_noise(noise_key, obs), state
@@ -37,8 +37,8 @@ class NoisyObservationWrapper(GymnaxWrapper):
         key: Key,
         state: environment.EnvState,
         action: Union[int, float],
-        params: Optional[environment.EnvParams] = None,
-    ) -> Tuple[Array, environment.EnvState, float, bool, dict]:
+        params: environment.EnvParams | None = None,
+    ) -> tuple[Array, environment.EnvState, float, bool, dict]:
         key, noise_key = jax.random.split(key)
         obs, state, reward, done, info = self._env.step(key, state, action, params)
         return self._add_noise(noise_key, obs), state, reward, done, info

@@ -1,4 +1,4 @@
-from typing import Optional, Tuple, Union
+from typing import Union
 
 import jax.numpy as jnp
 from flax import struct
@@ -24,8 +24,8 @@ class NormalizeRewardWrapper(GymnaxWrapper):
         self.eps = eps
 
     def reset(
-        self, key: Key, params: Optional[environment.EnvParams] = None
-    ) -> Tuple[Array, NormalizeRewardWrapperState]:
+        self, key: Key, params: environment.EnvParams | None = None
+    ) -> tuple[Array, NormalizeRewardWrapperState]:
         obs, env_state = self._env.reset(key, params)
         state = NormalizeRewardWrapperState(
             mean=0.0,
@@ -41,8 +41,8 @@ class NormalizeRewardWrapper(GymnaxWrapper):
         key: Key,
         state: NormalizeRewardWrapperState,
         action: Union[int, float],
-        params: Optional[environment.EnvParams] = None,
-    ) -> Tuple[Array, NormalizeRewardWrapperState, float, bool, dict]:
+        params: environment.EnvParams | None = None,
+    ) -> tuple[Array, NormalizeRewardWrapperState, float, bool, dict]:
         obs, env_state, reward, done, info = self._env.step(
             key, state.env_state, action, params
         )

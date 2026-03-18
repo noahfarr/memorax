@@ -1,4 +1,4 @@
-from typing import Any, Optional
+from typing import Any
 
 import jax
 import jax.numpy as jnp
@@ -7,7 +7,7 @@ from flax import struct
 
 from memorax.networks.sequence_models.sequence_model import SequenceModel
 from memorax.utils.axes import get_input_shape
-from memorax.utils.typing import Array, Carry
+from memorax.utils.typing import Array, Carry, Key
 
 from .base import Block
 
@@ -37,7 +37,7 @@ class SegmentRecurrence(nn.Module, Block):
     dtype: Any = None
 
     @nn.nowrap
-    def initialize_carry(self, key, input_shape) -> Carry:
+    def initialize_carry(self, key: Key, input_shape: tuple) -> Carry:
         *batch_dims, _ = input_shape
         state = jnp.zeros(
             (*batch_dims, self.memory_length, self.features), dtype=self.dtype
@@ -52,8 +52,8 @@ class SegmentRecurrence(nn.Module, Block):
     def __call__(
         self,
         inputs: Array,
-        done: Optional[Array] = None,
-        initial_carry: Optional[Carry] = None,
+        done: Array | None = None,
+        initial_carry: Carry | None = None,
         **kwargs,
     ) -> tuple[Carry, Array]:
         if initial_carry is None:

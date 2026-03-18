@@ -3,6 +3,7 @@ import numpy as np
 import orbax.checkpoint.experimental.v1 as ocp
 
 from memorax.utils.decorators import callback
+from memorax.utils.typing import PyTree
 
 
 class CheckpointLogger:
@@ -18,11 +19,11 @@ class CheckpointLogger:
         )
 
     @callback
-    def log(self, data, step, train_state=None, **kwargs):
+    def log(self, data: PyTree, step: int, train_state: PyTree | None = None, **kwargs):
         if train_state is None:
             return
         train_state = jax.tree.map(lambda value: np.asarray(value), train_state)
         self.checkpointer.save_pytree(int(step), train_state, force=True)
 
-    def finish(self):
+    def finish(self) -> None:
         self.checkpointer.close()

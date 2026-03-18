@@ -1,4 +1,4 @@
-from typing import Any, Optional
+from typing import Any
 
 import jax.numpy as jnp
 from flax import struct
@@ -20,11 +20,11 @@ class MultiAgentRecordEpisodeStatistics:
     def __init__(self, env):
         self._env = env
 
-    def __getattr__(self, name):
+    def __getattr__(self, name: str) -> Any:
         return getattr(self._env, name)
 
     def reset(
-        self, key: Key, params: Optional[EnvParams] = None
+        self, key: Key, params: EnvParams | None = None
     ) -> tuple[Array, MultiAgentRecordEpisodeStatisticsState]:
         obs, env_state = self._env.reset(key, params)
         episode_returns = jnp.zeros(self._env.num_agents)
@@ -39,7 +39,7 @@ class MultiAgentRecordEpisodeStatistics:
         key: Key,
         state: MultiAgentRecordEpisodeStatisticsState,
         action: int | float,
-        params: Optional[EnvParams] = None,
+        params: EnvParams | None = None,
     ) -> tuple[Array, MultiAgentRecordEpisodeStatisticsState, Array, bool, dict[str, Any]]:
         obs, env_state, reward, done, info = self._env.step(
             key, state.env_state, action, params

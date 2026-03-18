@@ -2,6 +2,8 @@ import jax.numpy as jnp
 from flax import linen as nn
 from flax.typing import Dtype
 
+from memorax.utils.typing import Array
+
 
 class MultiHeadLayerNorm(nn.Module):
     eps: float = 1e-5
@@ -12,7 +14,7 @@ class MultiHeadLayerNorm(nn.Module):
     param_dtype: Dtype = jnp.float32
 
     @nn.compact
-    def __call__(self, x):
+    def __call__(self, x) -> Array:
         B, NH, S, DH = x.shape
 
         y = nn.vmap(

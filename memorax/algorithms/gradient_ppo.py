@@ -1,5 +1,5 @@
 from functools import partial
-from typing import Any, Callable, Optional
+from typing import Any, Callable
 
 import flax.linen as nn
 import jax
@@ -10,7 +10,7 @@ from flax import core, struct
 
 from memorax.utils import Timestep, Transition
 from memorax.utils.axes import add_feature_axis, remove_feature_axis, remove_time_axis
-from memorax.utils.typing import Array, Discrete, Environment, EnvParams, EnvState, Key
+from memorax.utils.typing import Array, Discrete, Environment, EnvParams, EnvState, Key, Carry, PyTree
 
 
 @struct.dataclass(frozen=True)
@@ -26,7 +26,7 @@ class GradientPPOConfig:
     entropy_coefficient: float
     regularization_coefficient: float
     truncation_length: int
-    target_kl: Optional[float] = None
+    target_kl: float | None = None
     burn_in_length: int = 0
 
     @property
@@ -195,7 +195,7 @@ class GradientPPO:
         return (key, state), transition
 
     def _update_actor(
-        self, key, state: GradientPPOState, initial_actor_carry, transitions, advantages
+        self, key: Key, state: GradientPPOState, initial_actor_carry: Carry, transitions: Transition, advantages: Array
     ):
         key, torso_key, dropout_key = jax.random.split(key, 3)
 
@@ -217,7 +217,7 @@ class GradientPPO:
             )
             advantages = advantages[:, self.cfg.burn_in_length :]
 
-        def actor_loss_fn(params):
+        def actor_loss_fn(params: PyTree):
             _, (probs, _) = self.actor_network.apply(
                 params,
                 observation=transitions.first.obs,
@@ -264,7 +264,7 @@ class GradientPPO:
         )
         return key, state, actor_loss.mean(), aux
 
-    def _compute_delta_lambda(self, critic_params, transitions, initial_critic_carry):
+    def _compute_delta_lambda(self, critic_params: PyTree, transitions: Transition, initial_critic_carry: Carry):
         gamma = self.critic_network.head.gamma
         _, (values, _) = self.critic_network.apply(
             critic_params,
@@ -290,7 +290,7 @@ class GradientPPO:
             - values
         )
 
-        def scan_fn(delta_lambda_next, delta_t):
+        def scan_fn(delta_lambda_next: Array, delta_t: Array):
             delta_lambda = delta_t + gamma * self.cfg.gae_lambda * delta_lambda_next
             return delta_lambda, delta_lambda
 
@@ -303,10 +303,10 @@ class GradientPPO:
         delta_lambda = jnp.moveaxis(delta_lambda, 0, 1)
         return delta_lambda, values
 
-    def _update_critic(self, key, state: GradientPPOState, transitions, h_values, initial_critic_carry):
+    def _update_critic(self, key: Key, state: GradientPPOState, transitions: Transition, h_values: Array, initial_critic_carry: Carry):
         key, torso_key, dropout_key = jax.random.split(key, 3)
 
-        def critic_loss_fn(params):
+        def critic_loss_fn(params: PyTree):
             delta_lambda, values = self._compute_delta_lambda(params, transitions, initial_critic_carry)
             critic_loss = (
                 jax.lax.stop_gradient(h_values) * delta_lambda
@@ -327,11 +327,11 @@ class GradientPPO:
         )
         return key, state, critic_loss.mean(), delta_lambda
 
-    def _update_h(self, key, state: GradientPPOState, transitions, delta_lambda, initial_h_carry):
+    def _update_h(self, key: Key, state: GradientPPOState, transitions: Transition, delta_lambda: Array, initial_h_carry: Carry):
         key, torso_key, dropout_key = jax.random.split(key, 3)
         delta_lambda = jax.lax.stop_gradient(delta_lambda)
 
-        def h_loss_fn(params):
+        def h_loss_fn(params: PyTree):
             _, (h_values, _) = self.h_network.apply(
                 params,
                 observation=transitions.first.obs,
@@ -360,7 +360,7 @@ class GradientPPO:
         )
         return key, state, h_loss.mean()
 
-    def _update_minibatch(self, carry, minibatch: tuple):
+    def _update_minibatch(self, carry: tuple, minibatch: tuple):
         key, state = carry
         (
             initial_actor_carry,
@@ -418,7 +418,7 @@ class GradientPPO:
 
         key, permutation_key = jax.random.split(key)
 
-        def shuffle(batch):
+        def shuffle(batch: PyTree):
             shuffle_time_axis = (
                 initial_actor_carry is None or initial_critic_carry is None
             )
@@ -553,7 +553,7 @@ class GradientPPO:
         return (key, state), None
 
     @partial(jax.jit, static_argnames=["self"])
-    def init(self, key):
+    def init(self, key: Key):
         (
             key,
             env_key,

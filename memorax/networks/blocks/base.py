@@ -1,6 +1,6 @@
-from typing import Optional, Protocol
+from typing import Protocol
 
-from memorax.utils.typing import Array, Carry
+from memorax.utils.typing import Array, Carry, Key
 
 
 class Block(Protocol):
@@ -13,9 +13,9 @@ class Block(Protocol):
     def __call__(
         self,
         inputs: Array,
-        done: Optional[Array] = None,
-        initial_carry: Optional[Carry] = None,
+        done: Array | None = None,
+        initial_carry: Carry | None = None,
         **kwargs,
     ) -> tuple[Carry, Array]: ...
 
-    def initialize_carry(self, key, input_shape) -> Carry: ...
+    def initialize_carry(self, key: Key, input_shape: tuple) -> Carry: ...

@@ -1,11 +1,11 @@
-from typing import Optional, Sequence
+from typing import Sequence
 
 import flax.linen as nn
 import jax
 import jax.numpy as jnp
 
 from memorax.utils.axes import get_input_shape
-from memorax.utils.typing import Array, Carry
+from memorax.utils.typing import Array, Carry, Key
 
 from .base import Block
 from .router import TopKRouter
@@ -21,8 +21,8 @@ class MoE(nn.Module, Block):
     def __call__(
         self,
         inputs: Array,
-        done: Optional[Array] = None,
-        initial_carry: Optional[Carry] = None,
+        done: Array | None = None,
+        initial_carry: Carry | None = None,
         **kwargs,
     ) -> tuple[Carry, Array]:
         if initial_carry is None:
@@ -52,7 +52,7 @@ class MoE(nn.Module, Block):
         return tuple(carry), output
 
     @nn.nowrap
-    def initialize_carry(self, key, input_shape) -> Carry:
+    def initialize_carry(self, key: Key, input_shape: tuple) -> Carry:
         return tuple(
             expert.initialize_carry(key, input_shape) for expert in self.experts
         )

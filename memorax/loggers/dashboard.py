@@ -46,7 +46,7 @@ class DashboardLogger:
         )
         self.live.start()
 
-    def log(self, data: PyTree, step: int, **kwargs):
+    def log(self, data: PyTree, step: int, **kwargs) -> None:
         self.progress.update(self.progress_task, completed=int(step))
         dashboard = self.build_dashboard(data, step, self.progress, self.progress_task)
         self.live.update(dashboard, refresh=True)

@@ -1,10 +1,8 @@
-from typing import Optional
-
 import flax.linen as nn
 import jax
 
 from memorax.networks import Identity
-from memorax.utils.typing import Array
+from memorax.utils.typing import Array, Carry
 
 
 class Network(nn.Module):
@@ -19,9 +17,9 @@ class Network(nn.Module):
         done: Array,
         action: Array,
         reward: Array,
-        initial_carry: Optional[Array] = None,
+        initial_carry: Array | None = None,
         **kwargs,
-    ):
+    ) -> tuple[Carry, Array]:
         x, embeddings = self.feature_extractor(
             observation, action=action, reward=reward, done=done
         )
@@ -44,7 +42,7 @@ class Network(nn.Module):
         return carry, x
 
     @nn.nowrap
-    def initialize_carry(self, input_shape):
+    def initialize_carry(self, input_shape: tuple) -> Carry:
         key = jax.random.key(0)
         return getattr(self.torso, "initialize_carry", lambda k, s: None)(
             key, input_shape

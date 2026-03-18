@@ -16,10 +16,12 @@ from memorax.utils.typing import (
     Array,
     Buffer,
     BufferState,
+    Carry,
     Environment,
     EnvParams,
     EnvState,
     Key,
+    PyTree,
 )
 
 
@@ -58,7 +60,7 @@ def compute_n_step_returns(
     batch_size, sequence_length = rewards.shape
     num_targets = sequence_length - n_step + 1
 
-    def compute_target(start_idx):
+    def compute_target(start_idx: int):
         n_step_return = jnp.zeros(batch_size)
         discount = 1.0
         done = jnp.ones(batch_size)
@@ -136,7 +138,7 @@ class R2D2:
         )
         return key, state, action, intermediates
 
-    def _step(self, carry, _, *, policy: Callable):
+    def _step(self, carry: tuple, _, *, policy: Callable):
         key, state = carry
 
         initial_carry = state.carry
@@ -281,7 +283,7 @@ class R2D2:
         )
         importance_weights = importance_weights[:, None]
 
-        def loss_fn(params):
+        def loss_fn(params: PyTree):
             carry, (q_values, aux) = self.q_network.apply(
                 params,
                 observation=experience.first.obs,
@@ -341,7 +343,7 @@ class R2D2:
 
         return state, info
 
-    def _update_step(self, carry, _):
+    def _update_step(self, carry: tuple, _):
         key, state = carry
         (key, state), transitions = jax.lax.scan(
             partial(self._step, policy=self._epsilon_greedy_action),
@@ -357,7 +359,7 @@ class R2D2:
         return (key, state), None
 
     @partial(jax.jit, static_argnames=["self"])
-    def init(self, key):
+    def init(self, key: Key):
         key, env_key, q_key, torso_key = jax.random.split(key, 4)
         env_keys = jax.random.split(env_key, self.cfg.num_envs)
 

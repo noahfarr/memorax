@@ -1,4 +1,4 @@
-from typing import Optional, Tuple, Union
+from typing import Union
 
 import jax.numpy as jnp
 from flax import struct
@@ -10,8 +10,8 @@ from gymnax.wrappers.purerl import GymnaxWrapper
 
 @struct.dataclass
 class NormalizeObservationWrapperState:
-    mean: jnp.ndarray
-    M2: jnp.ndarray
+    mean: Array
+    M2: Array
     count: float
     env_state: environment.EnvState
 
@@ -21,7 +21,7 @@ class NormalizeObservationWrapper(GymnaxWrapper):
         super().__init__(env)
         self.eps = eps
 
-    def _welford_update(self, mean, M2, count, obs):
+    def _welford_update(self, mean: Array, M2: Array, count: float, obs: Array) -> tuple[Array, Array, float]:
         count = count + 1
         delta = obs - mean
         mean = mean + delta / count
@@ -30,8 +30,8 @@ class NormalizeObservationWrapper(GymnaxWrapper):
         return mean, M2, count
 
     def reset(
-        self, key: Key, params: Optional[environment.EnvParams] = None
-    ) -> Tuple[Array, NormalizeObservationWrapperState]:
+        self, key: Key, params: environment.EnvParams | None = None
+    ) -> tuple[Array, NormalizeObservationWrapperState]:
         obs, env_state = self._env.reset(key, params)
         mean = jnp.zeros_like(obs)
         M2 = jnp.ones_like(obs)
@@ -50,8 +50,8 @@ class NormalizeObservationWrapper(GymnaxWrapper):
         key: Key,
         state: NormalizeObservationWrapperState,
         action: Union[int, float],
-        params: Optional[environment.EnvParams] = None,
-    ) -> Tuple[Array, NormalizeObservationWrapperState, float, bool, dict]:
+        params: environment.EnvParams | None = None,
+    ) -> tuple[Array, NormalizeObservationWrapperState, float, bool, dict]:
         obs, env_state, reward, done, info = self._env.step(
             key, state.env_state, action, params
         )

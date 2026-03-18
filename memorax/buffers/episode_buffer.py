@@ -1,6 +1,6 @@
-from typing import TYPE_CHECKING, Callable, Optional
+from typing import TYPE_CHECKING, Callable
 
-from chex import PRNGKey
+from memorax.utils.typing import Array, Key
 
 if TYPE_CHECKING:
     pass
@@ -21,11 +21,11 @@ from flashbax.buffers.trajectory_buffer import (
 from flashbax.utils import add_dim_to_args
 
 
-def get_full_start_flags(experience: Experience) -> jnp.ndarray:
+def get_full_start_flags(experience: Experience) -> Array:
     return jnp.ones_like(experience.first.done)
 
 
-def get_start_flags_from_done(experience: Experience) -> jnp.ndarray:
+def get_start_flags_from_done(experience: Experience) -> Array:
     return experience.first.done
 
 
@@ -73,15 +73,15 @@ def validate_episode_buffer_args(
 
 def _valid_start_mask(
     state: TrajectoryBufferState[Experience], sample_sequence_length: int
-) -> jnp.ndarray:
+) -> Array:
     _, max_length_time_axis = utils.get_tree_shape_prefix(state.experience, n_axes=2)
     time_indices = jnp.arange(max_length_time_axis)
 
-    def _not_full():
+    def _not_full() -> Array:
         last_valid = jnp.maximum(state.current_index - sample_sequence_length, -1)
         return (time_indices >= 0) & (time_indices <= last_valid)
 
-    def _full():
+    def _full() -> Array:
         return jnp.ones((max_length_time_axis,), dtype=bool)
 
     return jax.lax.cond(state.is_full, _full, _not_full)
@@ -92,10 +92,10 @@ def make_episode_buffer(
     min_length: int,
     sample_batch_size: int,
     sample_sequence_length: int,
-    get_start_flags: Callable[[Experience], jnp.ndarray] = get_start_flags_from_done,
+    get_start_flags: Callable[[Experience], Array] = get_start_flags_from_done,
     add_sequences: bool = False,
-    add_batch_size: Optional[int] = None,
-    min_length_time_axis: Optional[int] = None,
+    add_batch_size: int | None = None,
+    min_length_time_axis: int | None = None,
 ) -> TrajectoryBuffer:
     if add_batch_size is None:
         add_batch_size = 1
@@ -133,7 +133,7 @@ def make_episode_buffer(
         )
 
     def sample_fn(
-        state: TrajectoryBufferState[Experience], rng_key: PRNGKey
+        state: TrajectoryBufferState[Experience], rng_key: Key
     ) -> TrajectoryBufferSample[Experience]:
         add_batch_size, max_length_time_axis = utils.get_tree_shape_prefix(
             state.experience, n_axes=2
@@ -151,7 +151,7 @@ def make_episode_buffer(
         per_row = jnp.sum(start_mask, axis=1)
         total = jnp.sum(per_row)
 
-        def _sample_from_starts(key):
+        def _sample_from_starts(key: Key) -> tuple[Array, Array]:
             p_rows = per_row / total
             key_rows, key_starts = jax.random.split(key)
 
@@ -175,7 +175,7 @@ def make_episode_buffer(
             )(keys, row_start_probs)
             return rows, starts
 
-        def _fallback_beginning(key):
+        def _fallback_beginning(key: Key) -> tuple[Array, Array]:
             rows = jax.random.randint(key, (sample_batch_size,), 0, add_batch_size)
             starts = jnp.zeros((sample_batch_size,), dtype=jnp.int32)
             return rows, starts

@@ -1,5 +1,5 @@
 from functools import partial
-from typing import Any, Callable, Optional
+from typing import Any, Callable
 
 import flax.linen as nn
 import jax
@@ -15,7 +15,7 @@ from memorax.utils.axes import (
     remove_feature_axis,
     remove_time_axis,
 )
-from memorax.utils.typing import Array, Environment, EnvParams, EnvState, Key
+from memorax.utils.typing import Array, Environment, EnvParams, EnvState, Key, Carry, PyTree
 
 to_sequence = lambda timestep: jax.tree.map(
     lambda x: jax.vmap(add_time_axis)(x), timestep
@@ -37,7 +37,7 @@ class MAPPOConfig:
     clip_coefficient: float
     clip_value_loss: bool
     entropy_coefficient: float
-    target_kl: Optional[float] = None
+    target_kl: float | None = None
     burn_in_length: int = 0
 
     @property
@@ -135,7 +135,7 @@ class MAPPO:
         state = state.replace(actor_carry=actor_carry, critic_carry=critic_carry)
         return key, state, action, log_prob, value, intermediates
 
-    def _generalized_advantage_estimation(self, carry, transition):
+    def _generalized_advantage_estimation(self, carry: tuple, transition: Transition):
         advantage, next_value = carry
         delta = (
             self.critic_network.head.get_target(transition, next_value)
@@ -207,7 +207,7 @@ class MAPPO:
         return (key, state), transition
 
     def _update_actor(
-        self, key, state: MAPPOState, initial_actor_carry, transitions, advantages
+        self, key: Key, state: MAPPOState, initial_actor_carry: Carry, transitions: Transition, advantages: Array
     ):
         key, torso_key, dropout_key = jax.random.split(key, 3)
 
@@ -231,7 +231,7 @@ class MAPPO:
             )
             advantages = advantages[:, :, self.cfg.burn_in_length :]
 
-        def actor_loss_fn(params):
+        def actor_loss_fn(params: PyTree):
             _, (probs, _) = self.actor_network.apply(
                 params,
                 transitions.first.obs,
@@ -281,7 +281,7 @@ class MAPPO:
         return key, state, actor_loss.mean(), aux
 
     def _update_critic(
-        self, key, state: MAPPOState, initial_critic_carry, transitions, returns
+        self, key: Key, state: MAPPOState, initial_critic_carry: Carry, transitions: Transition, returns: Array
     ):
         key, torso_key, dropout_key = jax.random.split(key, 3)
 
@@ -305,7 +305,7 @@ class MAPPO:
             )
             returns = returns[:, :, self.cfg.burn_in_length :]
 
-        def critic_loss_fn(params):
+        def critic_loss_fn(params: PyTree):
             _, (values, aux) = self.critic_network.apply(
                 params,
                 transitions.first.obs,
@@ -349,7 +349,7 @@ class MAPPO:
         )
         return key, state, critic_loss.mean()
 
-    def _update_minibatch(self, carry, minibatch: tuple):
+    def _update_minibatch(self, carry: tuple, minibatch: tuple):
         key, state = carry
         (
             initial_actor_carry,
@@ -391,7 +391,7 @@ class MAPPO:
             returns,
         )
 
-        def shuffle(batch):
+        def shuffle(batch: PyTree):
             shuffle_time_axis = (
                 initial_actor_carry is None or initial_critic_carry is None
             )
@@ -539,7 +539,7 @@ class MAPPO:
         return (key, state), None
 
     @partial(jax.jit, static_argnames=["self"])
-    def init(self, key):
+    def init(self, key: Key):
         (
             key,
             env_key,
@@ -637,7 +637,7 @@ class MAPPO:
         return key, state
 
     @partial(jax.jit, static_argnames=["self", "num_steps", "deterministic"])
-    def evaluate(self, key: Key, state: MAPPOState, num_steps: int, deterministic=True):
+    def evaluate(self, key: Key, state: MAPPOState, num_steps: int, deterministic: bool = True):
         key, reset_key = jax.random.split(key)
         num_agents = self.env.num_agents
 

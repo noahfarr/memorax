@@ -1,10 +1,13 @@
 import math
+from typing import Callable
 
 import jax
 import jax.numpy as jnp
 
+from memorax.utils.typing import Array, Key
 
-def sparse(sparsity: float = 0.9):
+
+def sparse(sparsity: float = 0.9) -> Callable:
     """LeCun uniform initialization with sparse connectivity.
 
     For each output unit, zeros out `sparsity` fraction of input connections
@@ -14,7 +17,7 @@ def sparse(sparsity: float = 0.9):
         sparsity: Fraction of weights to zero out per output unit (default: 0.9).
     """
 
-    def init(key, shape, dtype=jnp.float32):
+    def init(key: Key, shape: tuple, dtype=jnp.float32) -> Array:
         fan_in = math.prod(shape[:-1])
         fan_out = shape[-1]
         limit = math.sqrt(1.0 / fan_in)

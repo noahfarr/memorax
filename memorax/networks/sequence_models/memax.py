@@ -1,11 +1,9 @@
-from typing import Optional, Tuple
-
 import jax
 import jax.numpy as jnp
 from flax import linen as nn
 
 from memorax.utils.axes import get_input_shape
-from memorax.utils.typing import Array, Carry
+from memorax.utils.typing import Array, Carry, Key
 
 from .sequence_model import SequenceModel
 
@@ -17,9 +15,9 @@ class MemaxWrapper(SequenceModel, nn.Module):
         self,
         inputs: Array,
         done: Array,
-        initial_carry: Optional[Carry] = None,
+        initial_carry: Carry | None = None,
         **kwargs,
-    ) -> Tuple[Carry, Array]:
+    ) -> tuple[Carry, Array]:
         if initial_carry is None:
             initial_carry = self.initialize_carry(
                 jax.random.key(0), get_input_shape(inputs)
@@ -38,7 +36,7 @@ class MemaxWrapper(SequenceModel, nn.Module):
 
         return carry, output
 
-    def initialize_carry(self, key, input_shape):
+    def initialize_carry(self, key: Key, input_shape: tuple) -> Carry:
         batch_size = input_shape[0]
         single_carry = self.model.initialize_carry(key)
         return jax.tree.map(

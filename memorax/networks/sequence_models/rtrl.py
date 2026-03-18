@@ -1,5 +1,3 @@
-from typing import Optional, Tuple
-
 import jax
 from flax import linen as nn
 
@@ -17,9 +15,9 @@ class RTRL(SequenceModel):
         self,
         inputs: Array,
         done: Array,
-        initial_carry: Optional[Carry] = None,
+        initial_carry: Carry | None = None,
         **kwargs,
-    ) -> Tuple[Carry, Array]:
+    ) -> tuple[Carry, Array]:
         if initial_carry is None:
             input_shape = get_input_shape(inputs)
             initial_carry = self.initialize_carry(jax.random.key(0), input_shape)
@@ -36,7 +34,7 @@ class RTRL(SequenceModel):
 
         return (next_carry, next_sensitivity), y
 
-    def initialize_carry(self, key: jax.Array, input_shape: Tuple[int, ...]) -> Carry:
+    def initialize_carry(self, key: jax.Array, input_shape: tuple[int, ...]) -> Carry:
         carry = self.sequence_model.initialize_carry(key, input_shape)
         sensitivity = self.sequence_model.initialize_sensitivity(key, input_shape)
         return (carry, sensitivity)

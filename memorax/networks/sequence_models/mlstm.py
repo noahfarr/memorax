@@ -13,7 +13,7 @@ Core recurrence:
 This is associative when we track cumulative decay properly.
 """
 
-from typing import Optional, Tuple
+from typing import Tuple
 
 import jax
 import jax.numpy as jnp
@@ -57,7 +57,7 @@ class mLSTMCell(MemoroidCellBase):
     num_heads: int = 4
     conv_kernel_size: int = 4
     dropout_rate: float = 0.0
-    dtype: Optional[Dtype] = None
+    dtype: Dtype | None = None
     param_dtype: Dtype = jnp.float32
 
     def setup(self):

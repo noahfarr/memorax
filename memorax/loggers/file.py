@@ -8,7 +8,7 @@ class FileLogger:
         self.directory = Path(directory)
         self.directory.mkdir(exist_ok=True, parents=True)
 
-    def log(self, data: PyTree, step: int, **kwargs):
+    def log(self, data: PyTree, step: int, **kwargs) -> None:
         for metric, value in data.items():
             path = (self.directory / f"{metric}.csv").resolve()
             path.parent.mkdir(exist_ok=True, parents=True)

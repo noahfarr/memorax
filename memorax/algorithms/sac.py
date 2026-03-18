@@ -14,10 +14,12 @@ from memorax.utils.typing import (
     Array,
     Buffer,
     BufferState,
+    Carry,
     Environment,
     EnvParams,
     EnvState,
     Key,
+    PyTree,
 )
 
 
@@ -62,7 +64,7 @@ class SAC:
     alpha_optimizer: optax.GradientTransformation
     buffer: Buffer
 
-    def _deterministic_action(self, key, state: SACState):
+    def _deterministic_action(self, key: Key, state: SACState):
         key, sample_key = jax.random.split(key)
         timestep = state.timestep.to_sequence()
         (next_carry, (dist, _)), intermediates = self.actor_network.apply(
@@ -80,7 +82,7 @@ class SAC:
         state = state.replace(actor_carry=next_carry)
         return key, state, action, intermediates
 
-    def _stochastic_action(self, key, state: SACState):
+    def _stochastic_action(self, key: Key, state: SACState):
         key, sample_key = jax.random.split(key)
         timestep = state.timestep.to_sequence()
         (next_carry, (dist, _)), intermediates = self.actor_network.apply(
@@ -97,7 +99,7 @@ class SAC:
         state = state.replace(actor_carry=next_carry)
         return key, state, action, intermediates
 
-    def _random_action(self, key, state: SACState):
+    def _random_action(self, key: Key, state: SACState):
         key, action_key = jax.random.split(key)
         action_keys = jax.random.split(action_key, self.cfg.num_envs)
         action = jax.vmap(self.env.action_space(self.env_params).sample)(action_keys)
@@ -105,7 +107,7 @@ class SAC:
 
     def _step(
         self,
-        carry,
+        carry: tuple,
         _,
         *,
         policy: Callable,
@@ -175,7 +177,7 @@ class SAC:
         return (key, state), transition
 
     @partial(jax.jit, static_argnames=["self"])
-    def init(self, key):
+    def init(self, key: Key):
         key, env_key, actor_key, actor_torso_key, critic_key, critic_torso_key, alpha_key = (
             jax.random.split(key, 7)
         )
@@ -250,10 +252,10 @@ class SAC:
 
     def _update_alpha(
         self,
-        key,
+        key: Key,
         state: SACState,
-        experience,
-        initial_actor_carry=None,
+        experience: PyTree,
+        initial_actor_carry: Carry = None,
     ):
         action_dim, *_ = self.env.action_space(self.env_params).shape
         target_entropy = -self.cfg.target_entropy_scale * action_dim
@@ -270,7 +272,7 @@ class SAC:
         key, sample_key = jax.random.split(key)
         _, log_probs = dist.sample_and_log_prob(seed=sample_key)
 
-        def alpha_loss_fn(alpha_params):
+        def alpha_loss_fn(alpha_params: PyTree):
             log_alpha = self.alpha_network.apply(alpha_params)
             alpha = jnp.exp(log_alpha)
             alpha_loss = (alpha * (-log_probs - target_entropy)).mean()
@@ -292,11 +294,11 @@ class SAC:
 
     def _update_actor(
         self,
-        key,
+        key: Key,
         state: SACState,
-        experience,
-        initial_actor_carry=None,
-        initial_critic_carry=None,
+        experience: PyTree,
+        initial_actor_carry: Carry = None,
+        initial_critic_carry: Carry = None,
     ):
         log_alpha = self.alpha_network.apply(state.alpha_params)
         alpha = jnp.exp(log_alpha)
@@ -342,12 +344,12 @@ class SAC:
 
     def _update_critic(
         self,
-        key,
+        key: Key,
         state: SACState,
-        experience,
-        initial_actor_carry=None,
-        initial_critic_carry=None,
-        initial_target_critic_carry=None,
+        experience: PyTree,
+        initial_actor_carry: Carry = None,
+        initial_critic_carry: Carry = None,
+        initial_target_critic_carry: Carry = None,
     ):
         _, (dist, _) = self.actor_network.apply(
             state.actor_params,
@@ -424,7 +426,7 @@ class SAC:
         )
         return state, info
 
-    def _update(self, key, state: SACState):
+    def _update(self, key: Key, state: SACState):
         key, batch_key, critic_key, actor_key, alpha_key = jax.random.split(key, 5)
         experience = self.buffer.sample(state.buffer_state, batch_key).experience
         experience = jax.tree.map(lambda x: jnp.expand_dims(x, 1), experience)
@@ -499,7 +501,7 @@ class SAC:
 
         return state, info
 
-    def _update_step(self, carry, _):
+    def _update_step(self, carry: tuple, _):
         key, state = carry
         (key, state), transitions = jax.lax.scan(
             partial(self._step, policy=self._stochastic_action),

@@ -8,7 +8,7 @@ in https://arxiv.org/abs/1511.05952. It combines:
 """
 
 import functools
-from typing import TYPE_CHECKING, Callable, Generic, Optional
+from typing import TYPE_CHECKING, Callable, Generic
 
 if TYPE_CHECKING:
     from dataclasses import dataclass
@@ -18,7 +18,7 @@ else:
 import chex
 import jax
 import jax.numpy as jnp
-from chex import PRNGKey
+from memorax.utils.typing import Key
 from flashbax import utils
 from flashbax.buffers import sum_tree
 from flashbax.buffers.prioritised_trajectory_buffer import (
@@ -86,7 +86,7 @@ def compute_importance_weights(
 
 def _valid_start_mask(
     state: PrioritisedTrajectoryBufferState[Experience], sample_sequence_length: int
-) -> jnp.ndarray:
+) -> Array:
     """Get mask of valid start positions based on buffer fill state.
 
     Args:
@@ -99,11 +99,11 @@ def _valid_start_mask(
     _, max_length_time_axis = utils.get_tree_shape_prefix(state.experience, n_axes=2)
     time_indices = jnp.arange(max_length_time_axis)
 
-    def _not_full():
+    def _not_full() -> Array:
         last_valid = jnp.maximum(state.current_index - sample_sequence_length, -1)
         return (time_indices >= 0) & (time_indices <= last_valid)
 
-    def _full():
+    def _full() -> Array:
         return jnp.ones((max_length_time_axis,), dtype=bool)
 
     return jax.lax.cond(state.is_full, _full, _not_full)
@@ -140,10 +140,10 @@ def _get_priorities_for_positions(
 
 def prioritised_episode_sample(
     state: PrioritisedTrajectoryBufferState[Experience],
-    rng_key: PRNGKey,
+    rng_key: Key,
     sample_batch_size: int,
     sample_sequence_length: int,
-    get_start_flags: Callable[[Experience], jnp.ndarray],
+    get_start_flags: Callable[[Experience], Array],
 ) -> PrioritisedEpisodeBufferSample[Experience]:
     """Sample episodes weighted by priority, respecting episode boundaries.
 
@@ -184,8 +184,7 @@ def prioritised_episode_sample(
     flat_priorities = masked_priorities.flatten()
     total_priority = jnp.sum(flat_priorities)
 
-    def _sample_with_priorities(key):
-        """Sample using priority-weighted selection."""
+    def _sample_with_priorities(key: Key) -> tuple[Array, Array, Array, Array]:
         probs = flat_priorities / jnp.maximum(total_priority, 1e-10)
 
         flat_indices = jax.random.choice(
@@ -203,8 +202,7 @@ def prioritised_episode_sample(
 
         return rows, starts, flat_indices, selected_probs
 
-    def _fallback_uniform(key):
-        """Fallback to uniform sampling if no valid starts with priority."""
+    def _fallback_uniform(key: Key) -> tuple[Array, Array, Array, Array]:
         rows = jax.random.randint(key, (sample_batch_size,), 0, add_batch_size)
         starts = jnp.zeros((sample_batch_size,), dtype=jnp.int32)
         flat_indices = rows * max_length_time_axis + starts
@@ -322,9 +320,9 @@ def make_prioritised_episode_buffer(
     min_length: int,
     sample_batch_size: int,
     sample_sequence_length: int,
-    get_start_flags: Callable[[Experience], jnp.ndarray] = get_start_flags_from_done,
+    get_start_flags: Callable[[Experience], Array] = get_start_flags_from_done,
     add_sequences: bool = False,
-    add_batch_size: Optional[int] = None,
+    add_batch_size: int | None = None,
     priority_exponent: float = 0.6,
     device: str = "cpu",
 ) -> PrioritisedTrajectoryBuffer:

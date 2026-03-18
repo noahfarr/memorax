@@ -107,6 +107,6 @@ for i in range(num_epochs):
         "training/episode_lengths": episode_lengths,
         **logs,
     }
-    logger.log(data, step=state.step[0].item())
+    logger.log(data, step=state.step.mean().item())
 
 logger.finish()

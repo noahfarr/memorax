@@ -17,7 +17,7 @@ class BlockDiagonalDense(nn.Module):
     param_dtype: Dtype = jnp.float32
 
     @nn.compact
-    def __call__(self, x: Array) -> jax.Array:
+    def __call__(self, x: Array) -> Array:
         *batch, features = x.shape
         block_size = features // self.num_heads
 

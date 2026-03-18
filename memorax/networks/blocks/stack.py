@@ -1,8 +1,8 @@
-from typing import Optional, Sequence
+from typing import Sequence
 
 import flax.linen as nn
 
-from memorax.utils.typing import Array, Carry
+from memorax.utils.typing import Array, Carry, Key
 
 from .base import Block
 
@@ -33,8 +33,8 @@ class Stack(nn.Module, Block):
     def __call__(
         self,
         inputs: Array,
-        done: Optional[Array] = None,
-        initial_carry: Optional[tuple[Carry, ...]] = None,
+        done: Array | None = None,
+        initial_carry: tuple[Carry, ...] | None = None,
         **kwargs,
     ) -> tuple[tuple[Carry, ...], Array]:
         if initial_carry is None:
@@ -50,7 +50,7 @@ class Stack(nn.Module, Block):
         return tuple(carries), x
 
     @nn.nowrap
-    def initialize_carry(self, key, input_shape):
+    def initialize_carry(self, key: Key, input_shape: tuple) -> tuple[Carry, ...]:
         carries = []
         for block in self.blocks:
             if hasattr(block, "initialize_carry"):

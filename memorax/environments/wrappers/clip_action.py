@@ -1,4 +1,4 @@
-from typing import Optional, Tuple, Union
+from typing import Union
 
 import jax.numpy as jnp
 from gymnax.environments import environment
@@ -18,7 +18,7 @@ class ClipActionWrapper(GymnaxWrapper):
         key: Key,
         state: environment.EnvState,
         action: Union[int, float],
-        params: Optional[environment.EnvParams] = None,
-    ) -> Tuple[Array, environment.EnvState, float, bool, dict]:
+        params: environment.EnvParams | None = None,
+    ) -> tuple[Array, environment.EnvState, float, bool, dict]:
         action = jnp.clip(action, self.low, self.high)
         return self._env.step(key, state, action, params)

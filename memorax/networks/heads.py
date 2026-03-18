@@ -7,6 +7,7 @@ import jax.numpy as jnp
 from flax.linen.initializers import constant
 
 from memorax.utils.axes import add_feature_axis, remove_feature_axis
+from memorax.utils.typing import Array, PyTree
 
 
 class DiscreteQNetwork(nn.Module):
@@ -16,14 +17,14 @@ class DiscreteQNetwork(nn.Module):
     bias_init: nn.initializers.Initializer = nn.initializers.zeros_init()
 
     @nn.compact
-    def __call__(self, x: jnp.ndarray, **kwargs) -> tuple[jnp.ndarray, dict]:
+    def __call__(self, x: Array, **kwargs) -> tuple[Array, dict]:
         q_values = nn.Dense(
             self.action_dim, kernel_init=self.kernel_init, bias_init=self.bias_init
         )(x)
         return q_values, {}
 
     @nn.nowrap
-    def get_target(self, transition, next_value):
+    def get_target(self, transition, next_value) -> Array:
         next_value = jax.lax.stop_gradient(next_value)
         return (
             transition.second.reward
@@ -31,8 +32,8 @@ class DiscreteQNetwork(nn.Module):
         )
 
     def loss(
-        self, output: jnp.ndarray, aux: dict, targets: jnp.ndarray, **kwargs
-    ) -> jnp.ndarray:
+        self, output: Array, aux: dict, targets: Array, **kwargs
+    ) -> Array:
         return 0.5 * jnp.square(output - targets)
 
 
@@ -43,15 +44,15 @@ class ContinuousQNetwork(nn.Module):
 
     @nn.compact
     def __call__(
-        self, x: jnp.ndarray, *, action: jnp.ndarray, **kwargs
-    ) -> tuple[jnp.ndarray, dict]:
+        self, x: Array, *, action: Array, **kwargs
+    ) -> tuple[Array, dict]:
         q_values = nn.Dense(1, kernel_init=self.kernel_init, bias_init=self.bias_init)(
             jnp.concatenate([x, action], axis=-1)
         )
         return jnp.squeeze(q_values, -1), {}
 
     @nn.nowrap
-    def get_target(self, transition, next_value):
+    def get_target(self, transition, next_value) -> Array:
         next_value = jax.lax.stop_gradient(next_value)
         return (
             transition.second.reward
@@ -59,8 +60,8 @@ class ContinuousQNetwork(nn.Module):
         )
 
     def loss(
-        self, output: jnp.ndarray, aux: dict, targets: jnp.ndarray, **kwargs
-    ) -> jnp.ndarray:
+        self, output: Array, aux: dict, targets: Array, **kwargs
+    ) -> Array:
         return 0.5 * jnp.square(output - targets)
 
 
@@ -71,15 +72,15 @@ class TwinContinuousQNetwork(nn.Module):
 
     @nn.compact
     def __call__(
-        self, x: jnp.ndarray, *, action: jnp.ndarray, **kwargs
-    ) -> tuple[tuple[jnp.ndarray, jnp.ndarray], dict]:
+        self, x: Array, *, action: Array, **kwargs
+    ) -> tuple[tuple[Array, Array], dict]:
         inp = jnp.concatenate([x, action], axis=-1)
         q1 = nn.Dense(1, kernel_init=self.kernel_init, bias_init=self.bias_init, name="q1")(inp)
         q2 = nn.Dense(1, kernel_init=self.kernel_init, bias_init=self.bias_init, name="q2")(inp)
         return (jnp.squeeze(q1, -1), jnp.squeeze(q2, -1)), {}
 
     @nn.nowrap
-    def get_target(self, transition, next_value):
+    def get_target(self, transition, next_value) -> Array:
         next_value = jax.lax.stop_gradient(next_value)
         return (
             transition.second.reward
@@ -87,8 +88,8 @@ class TwinContinuousQNetwork(nn.Module):
         )
 
     def loss(
-        self, output: jnp.ndarray, aux: dict, targets: jnp.ndarray, **kwargs
-    ) -> jnp.ndarray:
+        self, output: Array, aux: dict, targets: Array, **kwargs
+    ) -> Array:
         return 0.5 * jnp.square(output - targets)
 
 
@@ -98,12 +99,12 @@ class VNetwork(nn.Module):
     bias_init: nn.initializers.Initializer = nn.initializers.zeros_init()
 
     @nn.compact
-    def __call__(self, x: jnp.ndarray, **kwargs) -> tuple[jnp.ndarray, dict]:
+    def __call__(self, x: Array, **kwargs) -> tuple[Array, dict]:
         v_value = nn.Dense(1, kernel_init=self.kernel_init, bias_init=self.bias_init)(x)
         return v_value, {}
 
     @nn.nowrap
-    def get_target(self, transition, next_value):
+    def get_target(self, transition, next_value) -> Array:
         next_value = jax.lax.stop_gradient(next_value)
         return (
             transition.second.reward
@@ -111,8 +112,8 @@ class VNetwork(nn.Module):
         )
 
     def loss(
-        self, output: jnp.ndarray, aux: dict, targets: jnp.ndarray, **kwargs
-    ) -> jnp.ndarray:
+        self, output: Array, aux: dict, targets: Array, **kwargs
+    ) -> Array:
         return 0.5 * jnp.square(output - targets)
 
 
@@ -131,7 +132,7 @@ class HLGaussVNetwork(nn.Module):
         self.bin_centers = jnp.linspace(self.v_min, self.v_max, self.num_bins)
 
     @nn.compact
-    def __call__(self, x: jnp.ndarray, **kwargs) -> tuple[jnp.ndarray, dict]:
+    def __call__(self, x: Array, **kwargs) -> tuple[Array, dict]:
         logits = nn.Dense(
             self.num_bins, kernel_init=self.kernel_init, bias_init=self.bias_init
         )(x)
@@ -140,7 +141,7 @@ class HLGaussVNetwork(nn.Module):
         return value, {"logits": logits}
 
     @nn.nowrap
-    def get_target(self, transition, next_value):
+    def get_target(self, transition, next_value) -> Array:
         next_value = jax.lax.stop_gradient(next_value)
         return (
             transition.second.reward
@@ -149,8 +150,8 @@ class HLGaussVNetwork(nn.Module):
 
     @nn.nowrap
     def loss(
-        self, output: jnp.ndarray, aux: dict, targets: jnp.ndarray, **kwargs
-    ) -> jnp.ndarray:
+        self, output: Array, aux: dict, targets: Array, **kwargs
+    ) -> Array:
         """Two-hot cross-entropy loss."""
         logits = aux["logits"]
 
@@ -193,7 +194,7 @@ class C51QNetwork(nn.Module):
         self.atoms = jnp.linspace(self.v_min, self.v_max, self.num_atoms)
 
     @nn.compact
-    def __call__(self, x: jnp.ndarray, **kwargs) -> tuple[jnp.ndarray, dict]:
+    def __call__(self, x: Array, **kwargs) -> tuple[Array, dict]:
         logits = nn.Dense(
             self.action_dim * self.num_atoms,
             kernel_init=self.kernel_init,
@@ -209,7 +210,7 @@ class C51QNetwork(nn.Module):
         return q_values, {"logits": logits, "probs": probs}
 
     @nn.nowrap
-    def get_target(self, transition, next_value):
+    def get_target(self, transition, next_value) -> Array:
         next_value = jax.lax.stop_gradient(next_value)
         return (
             transition.second.reward
@@ -218,8 +219,8 @@ class C51QNetwork(nn.Module):
 
     @nn.nowrap
     def loss(
-        self, output: jnp.ndarray, aux: dict, targets: jnp.ndarray, **kwargs
-    ) -> jnp.ndarray:
+        self, output: Array, aux: dict, targets: Array, **kwargs
+    ) -> Array:
         logits = aux["logits"]
 
         targets = jnp.clip(targets, self.v_min, self.v_max)
@@ -252,7 +253,7 @@ class Categorical(nn.Module):
     bias_init: nn.initializers.Initializer = nn.initializers.zeros_init()
 
     @nn.compact
-    def __call__(self, x: jnp.ndarray, **kwargs) -> tuple[distrax.Categorical, dict]:
+    def __call__(self, x: Array, **kwargs) -> tuple[distrax.Categorical, dict]:
         logits = nn.Dense(
             self.action_dim, kernel_init=self.kernel_init, bias_init=self.bias_init
         )(x)
@@ -267,7 +268,7 @@ class Gaussian(nn.Module):
 
     @nn.compact
     def __call__(
-        self, x: jnp.ndarray, **kwargs
+        self, x: Array, **kwargs
     ) -> tuple[distrax.MultivariateNormalDiag, dict]:
         mean = nn.Dense(
             self.action_dim, kernel_init=self.kernel_init, bias_init=self.bias_init
@@ -288,7 +289,7 @@ class SquashedGaussian(nn.Module):
     LOG_STD_MAX = 2
 
     @nn.compact
-    def __call__(self, x: jnp.ndarray, **kwargs) -> tuple[distrax.Transformed, dict]:
+    def __call__(self, x: Array, **kwargs) -> tuple[distrax.Transformed, dict]:
         temperature = kwargs.get("temperature", 1.0)
 
         mean = nn.Dense(
@@ -309,7 +310,7 @@ class Alpha(nn.Module):
     initial_alpha: float
 
     @nn.compact
-    def __call__(self) -> jnp.ndarray:
+    def __call__(self) -> Array:
         log_alpha = self.param(
             "log_temp",
             constant(jnp.log(self.initial_alpha)),
@@ -322,7 +323,7 @@ class Beta(nn.Module):
     initial_beta: float
 
     @nn.compact
-    def __call__(self) -> jnp.ndarray:
+    def __call__(self) -> Array:
         log_beta = self.param(
             "log_temp",
             constant(jnp.log(self.initial_beta)),
@@ -337,11 +338,11 @@ class GVF(nn.Module):
     gamma: float
     cumulant: Callable
 
-    def __call__(self, x, **kwargs):
+    def __call__(self, x: Array, **kwargs) -> tuple[Array, dict]:
         return self.head(x, **kwargs)
 
     @nn.nowrap
-    def get_target(self, transition, next_value):
+    def get_target(self, transition: PyTree, next_value: Array) -> Array:
         next_value = jax.lax.stop_gradient(next_value)
         return (
             self.cumulant(transition)
@@ -349,7 +350,7 @@ class GVF(nn.Module):
         )
 
     @nn.nowrap
-    def loss(self, output, aux, targets, **kwargs):
+    def loss(self, output: Array, aux: dict, targets: Array, **kwargs) -> Array:
         return self.head.loss(output, aux, targets, **kwargs)
 
 
@@ -358,10 +359,10 @@ class Horde(nn.Module):
     demons: dict[str, nn.Module]
 
     @property
-    def gamma(self):
+    def gamma(self) -> float:
         return self.head.gamma
 
-    def __call__(self, x, **kwargs):
+    def __call__(self, x: Array, **kwargs) -> tuple[Array, dict]:
         output, aux = self.head(x, **kwargs)
         demons = {}
         for name, demon in self.demons.items():
@@ -369,11 +370,11 @@ class Horde(nn.Module):
         return output, {**aux, "demons": demons}
 
     @nn.nowrap
-    def get_target(self, transition, next_value):
+    def get_target(self, transition: PyTree, next_value: Array) -> Array:
         return self.head.get_target(transition, next_value)
 
     @nn.nowrap
-    def loss(self, output, aux, targets, **kwargs):
+    def loss(self, output: Array, aux: dict, targets: Array, **kwargs) -> Array:
         loss = self.head.loss(output, aux, targets, **kwargs)
         transitions = kwargs.get("transitions")
         for name, demon in self.demons.items():
@@ -397,7 +398,7 @@ class PredecessorHead(nn.Module):
     bias_init: nn.initializers.Initializer = nn.initializers.zeros_init()
 
     @nn.compact
-    def __call__(self, x, **kwargs):
+    def __call__(self, x: Array, **kwargs) -> tuple[tuple[Array, Array], dict]:
         phi = nn.Dense(
             self.features, kernel_init=self.kernel_init, bias_init=self.bias_init
         )(x)

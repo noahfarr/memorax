@@ -1,8 +1,8 @@
-from typing import Callable, Optional
+from typing import Callable
 
 import flax.linen as nn
 
-from memorax.utils.typing import Array, Carry
+from memorax.utils.typing import Array, Carry, Key
 
 from .base import Block
 
@@ -23,15 +23,15 @@ class PreNorm(nn.Module, Block):
     def __call__(
         self,
         inputs: Array,
-        done: Optional[Array] = None,
-        initial_carry: Optional[Carry] = None,
+        done: Array | None = None,
+        initial_carry: Carry | None = None,
         **kwargs,
     ) -> tuple[Carry, Array]:
         x = self.norm()(inputs)
         return self.module(x, done=done, initial_carry=initial_carry, **kwargs)
 
     @nn.nowrap
-    def initialize_carry(self, key, input_shape):
+    def initialize_carry(self, key: Key, input_shape: tuple) -> Carry:
         return self.module.initialize_carry(key, input_shape)
 
 
@@ -51,8 +51,8 @@ class PostNorm(nn.Module, Block):
     def __call__(
         self,
         inputs: Array,
-        done: Optional[Array] = None,
-        initial_carry: Optional[Carry] = None,
+        done: Array | None = None,
+        initial_carry: Carry | None = None,
         **kwargs,
     ) -> tuple[Carry, Array]:
         carry, output = self.module(
@@ -61,5 +61,5 @@ class PostNorm(nn.Module, Block):
         return carry, self.norm()(output)
 
     @nn.nowrap
-    def initialize_carry(self, key, input_shape):
+    def initialize_carry(self, key: Key, input_shape: tuple) -> Carry:
         return self.module.initialize_carry(key, input_shape)

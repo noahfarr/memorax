@@ -35,7 +35,7 @@ max_steps_in_episode = {
 }
 
 
-def make(env_id, **kwargs):
+def make(env_id: str, **kwargs) -> tuple:
     from pobax.envs import get_env
     from pobax.envs.wrappers.gymnax import (
         NormalizeVecObservation,

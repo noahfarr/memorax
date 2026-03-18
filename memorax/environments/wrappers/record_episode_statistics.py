@@ -1,4 +1,4 @@
-from typing import Any, Optional
+from typing import Any
 
 import jax
 import jax.numpy as jnp
@@ -21,11 +21,11 @@ class RecordEpisodeStatistics:
     def __init__(self, env):
         self._env = env
 
-    def __getattr__(self, name):
+    def __getattr__(self, name: str) -> Any:
         return getattr(self._env, name)
 
     def reset(
-        self, key: Key, params: Optional[EnvParams] = None
+        self, key: Key, params: EnvParams | None = None
     ) -> tuple[Array, RecordEpisodeStatisticsState]:
         obs, env_state = self._env.reset(key, params)
         state = RecordEpisodeStatisticsState(env_state, 0, 0, 0, 0)
@@ -36,7 +36,7 @@ class RecordEpisodeStatistics:
         key: Key,
         state: RecordEpisodeStatisticsState,
         action: int | float,
-        params: Optional[EnvParams] = None,
+        params: EnvParams | None = None,
     ) -> tuple[Array, RecordEpisodeStatisticsState, Array, bool, dict[str, Any]]:
         obs, env_state, reward, done, info = self._env.step(
             key, state.env_state, action, params

@@ -12,7 +12,7 @@ class TopKRouter(nn.Module):
     k: int = 2
 
     @nn.compact
-    def __call__(self, inputs: Array) -> tuple:
+    def __call__(self, inputs: Array) -> tuple[Array, Array]:
         batch_size, seq_len, _ = inputs.shape
         num_tokens = batch_size * seq_len
 

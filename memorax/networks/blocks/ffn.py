@@ -1,9 +1,9 @@
-from typing import Callable, Optional
+from typing import Callable
 
 import flax.linen as nn
 import jax.numpy as jnp
 
-from memorax.utils.typing import Array, Carry
+from memorax.utils.typing import Array, Carry, Key
 
 from .base import Block
 
@@ -22,8 +22,8 @@ class FFN(nn.Module, Block):
     def __call__(
         self,
         inputs: Array,
-        done: Optional[Array] = None,
-        initial_carry: Optional[Carry] = None,
+        done: Array | None = None,
+        initial_carry: Carry | None = None,
         **kwargs,
     ) -> tuple[Carry, Array]:
         hidden_dim = self.features * self.expansion_factor
@@ -46,7 +46,7 @@ class FFN(nn.Module, Block):
         return None, x
 
     @nn.nowrap
-    def initialize_carry(self, key, input_shape):
+    def initialize_carry(self, key: Key, input_shape: tuple) -> None:
         return None
 
 
@@ -62,8 +62,8 @@ class Projection(nn.Module, Block):
     def __call__(
         self,
         inputs: Array,
-        done: Optional[Array] = None,
-        initial_carry: Optional[Carry] = None,
+        done: Array | None = None,
+        initial_carry: Carry | None = None,
         **kwargs,
     ) -> tuple[Carry, Array]:
         x = nn.Dense(
@@ -75,7 +75,7 @@ class Projection(nn.Module, Block):
         return None, x
 
     @nn.nowrap
-    def initialize_carry(self, key, input_shape):
+    def initialize_carry(self, key: Key, input_shape: tuple) -> None:
         return None
 
 
@@ -92,8 +92,8 @@ class GLU(nn.Module, Block):
     def __call__(
         self,
         inputs: Array,
-        done: Optional[Array] = None,
-        initial_carry: Optional[Carry] = None,
+        done: Array | None = None,
+        initial_carry: Carry | None = None,
         **kwargs,
     ) -> tuple[Carry, Array]:
         hidden_dim = self.features * self.expansion_factor
@@ -119,5 +119,5 @@ class GLU(nn.Module, Block):
         return None, x
 
     @nn.nowrap
-    def initialize_carry(self, key, input_shape):
+    def initialize_carry(self, key: Key, input_shape: tuple) -> None:
         return None

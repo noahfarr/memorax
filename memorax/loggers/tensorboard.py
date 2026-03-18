@@ -11,7 +11,7 @@ class TensorBoardLogger:
             seed: SummaryWriter(log_dir=directory) for seed in range(num_seeds)
         }
 
-    def log(self, data: PyTree, step: int, **kwargs):
+    def log(self, data: PyTree, step: int, **kwargs) -> None:
         num_seeds = len(self.writers)
         data = jax.tree.map(lambda v: ensure_axis(v, num_seeds), data)
         for seed, writer in self.writers.items():

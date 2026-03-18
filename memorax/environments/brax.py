@@ -1,7 +1,10 @@
+from typing import Any
+
 import jax.numpy as jnp
 from gymnax.environments import EnvParams, spaces
 
 from memorax.environments.wrappers import GymnaxWrapper, MaskObservationWrapper
+from memorax.utils.typing import Array, Key
 
 mask_dims = {
     "ant": {
@@ -37,11 +40,11 @@ class BraxGymnaxWrapper(GymnaxWrapper):
     def default_params(self) -> EnvParams:
         return EnvParams(max_steps_in_episode=1000)
 
-    def reset(self, key, params):
+    def reset(self, key: Key, params) -> tuple[Array, Any]:
         state = self._env.reset(key)
         return state.obs, state
 
-    def step(self, key, state, action, params):
+    def step(self, key: Key, state, action: Array, params) -> tuple[Array, Any, Array, Array, dict]:
         next_state = self._env.step(state, action)
         return (
             next_state.obs,
@@ -51,14 +54,14 @@ class BraxGymnaxWrapper(GymnaxWrapper):
             {},
         )
 
-    def observation_space(self, params):
+    def observation_space(self, params) -> spaces.Box:
         return spaces.Box(
             low=-jnp.inf,
             high=jnp.inf,
             shape=(self._env.observation_size,),
         )
 
-    def action_space(self, params):
+    def action_space(self, params) -> spaces.Box:
         return spaces.Box(
             low=-1.0,
             high=1.0,
@@ -66,7 +69,7 @@ class BraxGymnaxWrapper(GymnaxWrapper):
         )
 
 
-def make(env_id, mode="F", backend="generalized", **kwargs):
+def make(env_id: str, mode="F", backend="generalized", **kwargs) -> tuple:
     from brax import envs
     from brax.envs.wrappers.training import AutoResetWrapper, EpisodeWrapper
 

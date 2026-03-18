@@ -1,9 +1,9 @@
-from typing import Optional
-
 import jax.numpy as jnp
 
+from memorax.utils.typing import Array
 
-def broadcast(x: Optional[jnp.ndarray], to: jnp.ndarray):
+
+def broadcast(x: Array | None, to: Array) -> Array | None:
     if x is None:
         return x
     if x.ndim > to.ndim:

@@ -1,4 +1,4 @@
-from typing import Callable, Optional, Tuple, Union
+from typing import Callable, Union
 
 import jax
 import jax.numpy as jnp
@@ -27,8 +27,8 @@ class PeriodicObservationWrapper(GymnaxWrapper):
         self.fill_fn = fill_fn
 
     def reset(
-        self, key: Key, params: Optional[environment.EnvParams] = None
-    ) -> Tuple[Array, PeriodicObservationWrapperState]:
+        self, key: Key, params: environment.EnvParams | None = None
+    ) -> tuple[Array, PeriodicObservationWrapperState]:
         obs, state = self._env.reset(key, params)
         state = PeriodicObservationWrapperState(step=0, env_state=state)
         return obs, state
@@ -38,8 +38,8 @@ class PeriodicObservationWrapper(GymnaxWrapper):
         key: Key,
         state: PeriodicObservationWrapperState,
         action: Union[int, float],
-        params: Optional[environment.EnvParams] = None,
-    ) -> Tuple[Array, PeriodicObservationWrapperState, float, bool, dict]:
+        params: environment.EnvParams | None = None,
+    ) -> tuple[Array, PeriodicObservationWrapperState, float, bool, dict]:
         key, fill_key = jax.random.split(key)
         obs, env_state, reward, done, info = self._env.step(
             key, state.env_state, action, params

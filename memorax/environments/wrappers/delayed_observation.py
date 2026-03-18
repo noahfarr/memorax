@@ -1,4 +1,4 @@
-from typing import Optional, Tuple, Union
+from typing import Union
 
 import jax.numpy as jnp
 from flax import struct
@@ -10,7 +10,7 @@ from gymnax.wrappers.purerl import GymnaxWrapper
 
 @struct.dataclass
 class DelayedObservationWrapperState:
-    buffer: jnp.ndarray
+    buffer: Array
     env_state: environment.EnvState
 
 
@@ -20,8 +20,8 @@ class DelayedObservationWrapper(GymnaxWrapper):
         self.delay = delay
 
     def reset(
-        self, key: Key, params: Optional[environment.EnvParams] = None
-    ) -> Tuple[Array, DelayedObservationWrapperState]:
+        self, key: Key, params: environment.EnvParams | None = None
+    ) -> tuple[Array, DelayedObservationWrapperState]:
         obs, env_state = self._env.reset(key, params)
         buffer = jnp.zeros((self.delay,) + obs.shape)
         buffer = buffer.at[0].set(obs)
@@ -33,8 +33,8 @@ class DelayedObservationWrapper(GymnaxWrapper):
         key: Key,
         state: DelayedObservationWrapperState,
         action: Union[int, float],
-        params: Optional[environment.EnvParams] = None,
-    ) -> Tuple[Array, DelayedObservationWrapperState, float, bool, dict]:
+        params: environment.EnvParams | None = None,
+    ) -> tuple[Array, DelayedObservationWrapperState, float, bool, dict]:
         obs, env_state, reward, done, info = self._env.step(
             key, state.env_state, action, params
         )

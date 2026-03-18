@@ -1,59 +1,51 @@
 import time
-from dataclasses import asdict
 
 import flax.linen as nn
 import jax
 import lox
-import optax
-from memorax.algorithms import PPO, PPOConfig
-from memorax.environments import environment
+
+from memorax.algorithms import ACLambda, ACLambdaConfig
+from memorax.environments.gymnasium import make
 from memorax.environments.wrappers import RecordEpisodeStatistics
 from memorax.loggers import DashboardLogger, MultiLogger
-from memorax.networks import RNN, FeatureExtractor, Network, Stack, heads
+from memorax.networks import RNN, FeatureExtractor, Network, Residual, Stack, heads
 from memorax.networks.blocks.ffn import Projection
 
-total_timesteps = 15_000_000
-num_epochs = 150
+total_timesteps = 500_000
+num_epochs = 50
 num_steps = total_timesteps // num_epochs
 seed = 0
-num_seeds = 1
-env_id = "popjym::CountRecallEasy"
+num_envs = 16
+env_id = "CartPole-v1"
 
-env, env_params = environment.make(env_id)
+env, env_params = make(env_id, num_envs=num_envs)
 env = RecordEpisodeStatistics(env)
 
 num_actions = env.action_space(env_params).n
 
-cfg = PPOConfig(
-    num_envs=64,
-    num_steps=1024,
-    gae_lambda=1.0,
-    num_minibatches=8,
-    update_epochs=30,
-    normalize_advantage=True,
-    clip_coefficient=0.3,
-    clip_value_loss=True,
-    entropy_coefficient=0.0,
-    target_kl=0.01,
+config = ACLambdaConfig(
+    num_envs=num_envs,
+    trace_lambda=0.8,
+    actor_lr=1.0,
+    critic_lr=1.0,
+    actor_kappa=3.0,
+    critic_kappa=2.0,
+    entropy_coefficient=0.01,
 )
 
 feature_extractor = FeatureExtractor(
     observation_extractor=nn.Sequential(
-        (nn.Dense(256), nn.LayerNorm(), nn.leaky_relu)
+        (nn.Dense(120), nn.relu, nn.Dense(84), nn.relu)
     ),
-)
-
-optimizer = optax.chain(
-    optax.clip_by_global_norm(0.5),
-    optax.adam(5e-5),
 )
 
 actor_network = Network(
     feature_extractor=feature_extractor,
     torso=Stack(
         blocks=(
-            RNN(cell=nn.GRUCell(features=256)),
-            Projection(features=256),
+            Projection(features=128),
+            Residual(module=RNN(cell=nn.GRUCell(features=128))),
+            Projection(features=64),
         )
     ),
     head=heads.Categorical(action_dim=num_actions),
@@ -63,35 +55,40 @@ critic_network = Network(
     feature_extractor=feature_extractor,
     torso=Stack(
         blocks=(
-            RNN(cell=nn.GRUCell(features=256)),
-            Projection(features=256),
+            Projection(features=128),
+            Residual(module=RNN(cell=nn.GRUCell(features=128))),
+            Projection(features=64),
         )
     ),
-    head=heads.VNetwork(),
+    head=heads.VNetwork(gamma=0.99),
 )
 
-agent = PPO(cfg, env, env_params, actor_network, critic_network, optimizer, optimizer)
+agent = ACLambda(config, env, env_params, actor_network, critic_network)
 
 logger = MultiLogger(
     [
         DashboardLogger(
             total_timesteps=total_timesteps,
-            summary={"Algorithm": "PPO", "Environment": env_id, "Torso": "GRU", "Total Timesteps": f"{total_timesteps:_}"},
+            summary={
+                "Algorithm": "AC-Lambda",
+                "Environment": env_id,
+                "Torso": "GRU",
+                "Total Timesteps": f"{total_timesteps:_}",
+            },
         )
     ]
 )
 
-init = jax.vmap(agent.init)
-train = jax.vmap(lox.spool(agent.train), in_axes=(0, 0, None))
+init = agent.init
+train = lox.spool(agent.train)
 
 key = jax.random.key(seed)
-keys = jax.random.split(key, num_seeds)
 
-keys, state = init(keys)
+key, state = init(key)
 
 for i in range(num_epochs):
     start = time.perf_counter()
-    (keys, state), logs = train(keys, state, num_steps)
+    (key, state), logs = train(key, state, num_steps)
     jax.block_until_ready(state)
     end = time.perf_counter()
 
@@ -107,6 +104,6 @@ for i in range(num_epochs):
         "training/episode_lengths": episode_lengths,
         **logs,
     }
-    logger.log(data, step=state.step.mean().item())
+    logger.log(data, step=state.step.item())
 
 logger.finish()

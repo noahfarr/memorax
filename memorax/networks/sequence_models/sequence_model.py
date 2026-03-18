@@ -1,10 +1,8 @@
 from abc import ABC, abstractmethod
-from typing import Optional, Tuple
-
 import jax
 from flax import linen as nn
 
-from memorax.utils.typing import Array, Carry
+from memorax.utils.typing import Array, Carry, Key
 
 
 class SequenceModel(ABC, nn.Module):
@@ -13,21 +11,21 @@ class SequenceModel(ABC, nn.Module):
         self,
         inputs: Array,
         done: Array,
-        initial_carry: Optional[Carry] = None,
+        initial_carry: Carry | None = None,
         **kwargs,
     ) -> tuple: ...
 
     @abstractmethod
-    def initialize_carry(self, key, input_shape) -> Carry: ...
+    def initialize_carry(self, key: Key, input_shape: tuple) -> Carry: ...
 
     def local_jacobian(
         self,
         inputs: Array,
         done: Array,
         carry: Carry,
-        sensitivity: Optional[dict] = None,
+        sensitivity: dict | None = None,
         **kwargs,
-    ) -> Tuple[Carry, Array, Optional[dict]]:
+    ) -> tuple[Carry, Array, dict | None]:
         """Forward pass with optional RTRL sensitivity propagation.
 
         Returns (next_carry, y, next_sensitivity).
@@ -38,7 +36,7 @@ class SequenceModel(ABC, nn.Module):
         return next_carry, y, None
 
     def initialize_sensitivity(
-        self, key: jax.Array, input_shape: Tuple[int, ...]
-    ) -> Optional[dict]:
+        self, key: jax.Array, input_shape: tuple[int, ...]
+    ) -> dict | None:
         """Initialize RTRL sensitivity tensors. Returns None if unsupported."""
         return None

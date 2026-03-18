@@ -1,6 +1,4 @@
 from functools import partial
-from typing import Dict, Optional, Tuple
-
 import jax
 import jax.numpy as jnp
 from flax import linen as nn
@@ -31,7 +29,7 @@ class RTUCell(RNNCellBase):
     eps: float = 1e-8
 
     @property
-    def num_feature_axes(self):
+    def num_feature_axes(self) -> int:
         return 1
 
     def setup(self):
@@ -56,7 +54,7 @@ class RTUCell(RNNCellBase):
             (self.hidden_dim, self.features),
         )
 
-    def _g_phi_norm(self):
+    def _g_phi_norm(self) -> tuple[Array, Array, Array, Array]:
         r = jnp.exp(-jnp.exp(self.nu_log))
         theta = jnp.exp(self.theta_log)
         g = r * jnp.cos(theta)
@@ -65,7 +63,7 @@ class RTUCell(RNNCellBase):
         return g, phi, norm, r
 
     @nn.compact
-    def __call__(self, carry: Carry, inputs: Array) -> Tuple[Carry, Array]:
+    def __call__(self, carry: Carry, inputs: Array) -> tuple[Carry, Array]:
         H = self.hidden_dim
         h_c1, h_c2 = carry[..., :H], carry[..., H:]
         g, phi, norm, _ = self._g_phi_norm()
@@ -76,7 +74,7 @@ class RTUCell(RNNCellBase):
         return new_carry, new_carry
 
     @nn.nowrap
-    def initialize_carry(self, key: jax.Array, input_shape: Tuple[int, ...]) -> Carry:
+    def initialize_carry(self, key: jax.Array, input_shape: tuple[int, ...]) -> Carry:
         *batch_dims, _ = input_shape
         return jnp.zeros((*batch_dims, 2 * self.hidden_dim))
 
@@ -87,9 +85,9 @@ class RTUCell(RNNCellBase):
         self,
         carry: Carry,
         inputs: Array,
-        sensitivity: Dict[str, Array],
+        sensitivity: dict[str, Array],
         **kwargs,
-    ) -> Tuple[Carry, Array, Dict[str, Array]]:
+    ) -> tuple[Carry, Array, dict[str, Array]]:
         H = self.hidden_dim
         h_c1, h_c2 = carry[..., :H], carry[..., H:]
         g, phi, norm, r = self._g_phi_norm()
@@ -139,8 +137,8 @@ class RTUCell(RNNCellBase):
         return new_carry, new_carry, next_sensitivity
 
     def initialize_sensitivity(
-        self, key: jax.Array, input_shape: Tuple[int, ...]
-    ) -> Optional[Dict[str, Array]]:
+        self, key: jax.Array, input_shape: tuple[int, ...]
+    ) -> dict[str, Array] | None:
         *batch_dims, _ = input_shape
         H = self.hidden_dim
         F = self.features
