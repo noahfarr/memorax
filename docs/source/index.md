@@ -72,8 +72,11 @@ critic = Network(feature_extractor, torso, heads.VNetwork())
 optimizer = optax.chain(optax.clip_by_global_norm(1.0), optax.adam(3e-4))
 
 agent = PPO(config, env, env_params, actor, critic, optimizer, optimizer)
-key, state = agent.init(jax.random.key(0))
-key, state = agent.train(key, state, num_steps=10_000)
+key = jax.random.key(0)
+key, init_key = jax.random.split(key)
+state = agent.init(init_key)
+key, train_key = jax.random.split(key)
+state = agent.train(train_key, state, num_steps=10_000)
 ```
 
 See the {doc}`getting_started/quickstart` for a complete walkthrough.
