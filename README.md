@@ -141,7 +141,6 @@ memorax/
    ├─ networks/       # MLP, CNN, ViT, RNN, heads, ...
    ├─ environments/   # Gymnax / PopGym / Brax / ...
    ├─ buffers/        # Custom flashbax buffers
-   ├─ kernels/        # Custom Pallas kernels
    ├─ loggers/        # CLI, WandB, TensorBoardX integrations
    └─ utils/
 ```
