@@ -161,8 +161,9 @@ class PPO:
         )(step_key, state.env_state, action, self.env_params)
 
         intermediates = jax.tree.map(
-            jnp.mean,
+            lambda x: jnp.mean(jnp.stack(x)),
             intermediates.get("intermediates", {}),
+            is_leaf=lambda x: isinstance(x, tuple),
         )
 
         broadcast_dims = tuple(

@@ -162,8 +162,9 @@ class MAPPO:
             self.env.step, in_axes=(0, 0, 1), out_axes=(1, 0, 1, 1, 0)
         )(step_keys, state.env_state, action)
         intermediates = jax.tree.map(
-            jnp.mean,
+            lambda x: jnp.mean(jnp.stack(x)),
             intermediates.get("intermediates", {}),
+            is_leaf=lambda x: isinstance(x, tuple),
         )
 
         broadcast_dims = tuple(
