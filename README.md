@@ -83,7 +83,7 @@ key, train_key = jax.random.split(key)
 state = agent.train(train_key, state, num_steps=500_000)
 ```
 
-See `examples/` for complete scripts with logging and evaluation.
+See `examples/` for complete scripts with logging and evaluation, or use [memorax-template](https://github.com/noahfarr/memorax-template) to get started with a fully configured Hydra-based experiment setup.
 
 <h2> 💡 Advanced Usage</h2>
 
