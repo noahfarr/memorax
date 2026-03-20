@@ -63,6 +63,18 @@ class GradientPPO:
     critic_optimizer: optax.GradientTransformation
     h_optimizer: optax.GradientTransformation
 
+    def __post_init__(self):
+        assert self.cfg.update_epochs >= 1, (
+            f"update_epochs ({self.cfg.update_epochs}) must be >= 1"
+        )
+        assert self.cfg.num_steps % self.cfg.truncation_length == 0, (
+            f"num_steps ({self.cfg.num_steps}) must be divisible by truncation_length ({self.cfg.truncation_length})"
+        )
+        num_truncations = self.cfg.num_envs * (self.cfg.num_steps // self.cfg.truncation_length)
+        assert num_truncations % self.cfg.num_minibatches == 0, (
+            f"num_envs * (num_steps // truncation_length) ({num_truncations}) must be divisible by num_minibatches ({self.cfg.num_minibatches})"
+        )
+
     def _deterministic_action(
         self, key: Key, state: GradientPPOState
     ) -> tuple[GradientPPOState, Array, Array, None, dict]:

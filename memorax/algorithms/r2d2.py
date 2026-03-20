@@ -96,6 +96,17 @@ class R2D2:
     epsilon_schedule: optax.Schedule
     beta_schedule: optax.Schedule
 
+    def __post_init__(self):
+        assert self.cfg.train_frequency >= self.cfg.num_envs, (
+            f"train_frequency ({self.cfg.train_frequency}) must be >= num_envs ({self.cfg.num_envs})"
+        )
+        assert self.cfg.train_frequency % self.cfg.num_envs == 0, (
+            f"train_frequency ({self.cfg.train_frequency}) must be divisible by num_envs ({self.cfg.num_envs})"
+        )
+        assert self.cfg.sequence_length > self.cfg.burn_in_length, (
+            f"sequence_length ({self.cfg.sequence_length}) must be > burn_in_length ({self.cfg.burn_in_length})"
+        )
+
     def _greedy_action(
         self, key: Key, state: R2D2State
     ) -> tuple[R2D2State, Array, dict]:

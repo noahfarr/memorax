@@ -58,6 +58,14 @@ class DQN:
     q_network: nn.Module
     optimizer: optax.GradientTransformation
     buffer: Buffer
+
+    def __post_init__(self):
+        assert self.cfg.train_frequency >= self.cfg.num_envs, (
+            f"train_frequency ({self.cfg.train_frequency}) must be >= num_envs ({self.cfg.num_envs})"
+        )
+        assert self.cfg.train_frequency % self.cfg.num_envs == 0, (
+            f"train_frequency ({self.cfg.train_frequency}) must be divisible by num_envs ({self.cfg.num_envs})"
+        )
     epsilon_schedule: optax.Schedule
 
     def _greedy_action(

@@ -55,6 +55,14 @@ class PQN:
     optimizer: optax.GradientTransformation
     epsilon_schedule: optax.Schedule
 
+    def __post_init__(self):
+        assert self.cfg.update_epochs >= 1, (
+            f"update_epochs ({self.cfg.update_epochs}) must be >= 1"
+        )
+        assert self.cfg.batch_size % self.cfg.num_minibatches == 0, (
+            f"num_envs * num_steps ({self.cfg.batch_size}) must be divisible by num_minibatches ({self.cfg.num_minibatches})"
+        )
+
     def _greedy_action(
         self, key: Key, state: PQNState
     ) -> tuple[PQNState, Array, Array, dict]:

@@ -69,6 +69,14 @@ class MAPPO:
     actor_optimizer: optax.GradientTransformation
     critic_optimizer: optax.GradientTransformation
 
+    def __post_init__(self):
+        assert self.cfg.update_epochs >= 1, (
+            f"update_epochs ({self.cfg.update_epochs}) must be >= 1"
+        )
+        assert self.cfg.batch_size % self.cfg.num_minibatches == 0, (
+            f"num_envs * num_steps ({self.cfg.batch_size}) must be divisible by num_minibatches ({self.cfg.num_minibatches})"
+        )
+
     def _deterministic_action(
         self, key: Key, state: MAPPOState
     ) -> tuple[MAPPOState, Array, Array, None, dict]:
