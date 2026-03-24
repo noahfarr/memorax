@@ -42,6 +42,7 @@ class R2D2Config:
 @struct.dataclass(frozen=True)
 class R2D2State:
     step: int
+    update_step: int
     timestep: Timestep
     carry: tuple
     env_state: EnvState
@@ -109,7 +110,7 @@ class R2D2:
 
     def _greedy_action(
         self, key: Key, state: R2D2State
-    ) -> tuple[R2D2State, Array, dict]:
+    ) -> tuple[R2D2State, Array, Array, dict]:
         torso_key = key
         timestep = state.timestep.to_sequence()
         (carry, (q_values, _)), intermediates = self.q_network.apply(
@@ -122,25 +123,25 @@ class R2D2:
             rngs={"torso": torso_key},
             mutable=["intermediates"],
         )
+        q_values = remove_time_axis(q_values)
         action = jnp.argmax(q_values, axis=-1)
-        action = remove_time_axis(action)
         state = state.replace(carry=carry)
-        return state, action, intermediates
+        return state, action, q_values, intermediates
 
     def _random_action(
         self, key: Key, state: R2D2State
-    ) -> tuple[R2D2State, Array, dict]:
+    ) -> tuple[R2D2State, Array, None, dict]:
         action_key = jax.random.split(key, self.cfg.num_envs)
         action = jax.vmap(self.env.action_space(self.env_params).sample)(action_key)
-        return state, action, {}
+        return state, action, None, {}
 
     def _epsilon_greedy_action(
         self, key: Key, state: R2D2State
-    ) -> tuple[R2D2State, Array, dict]:
+    ) -> tuple[R2D2State, Array, Array, dict]:
         random_key, greedy_key, sample_key = jax.random.split(key, 3)
 
-        state, random_action, _ = self._random_action(random_key, state)
-        state, greedy_action, intermediates = self._greedy_action(greedy_key, state)
+        state, random_action, _, _ = self._random_action(random_key, state)
+        state, greedy_action, q_values, intermediates = self._greedy_action(greedy_key, state)
 
         epsilon = self.epsilon_schedule(state.step)
         action = jnp.where(
@@ -148,7 +149,7 @@ class R2D2:
             random_action,
             greedy_action,
         )
-        return state, action, intermediates
+        return state, action, q_values, intermediates
 
     def _step(self, state: R2D2State, key: Key, *, policy: Callable) -> tuple[R2D2State, Transition]:
         action_key, step_key = jax.random.split(key)
@@ -319,6 +320,7 @@ class R2D2:
         (loss, (q_value, td_error, carry)), grads = jax.value_and_grad(
             loss_fn, has_aux=True
         )(state.params)
+        lox.log({"training/gradient_norm": optax.global_norm(grads)})
 
         updates, optimizer_state = self.optimizer.update(
             grads, state.optimizer_state, state.params
@@ -340,8 +342,9 @@ class R2D2:
 
         info = {
             "losses/loss": loss,
-            "losses/q_value": q_value.mean(),
+            "training/q_value": q_value.mean(),
             "losses/td_error": mean_td_error.mean(),
+            "training/epsilon": self.epsilon_schedule(state.step),
         }
 
         state = state.replace(
@@ -365,9 +368,9 @@ class R2D2:
 
         state, info = self._update(update_key, state)
 
-        lox.log(info)
+        lox.log({**info, "training/step": state.step, "training/update_step": state.update_step})
 
-        return state, None
+        return state.replace(update_step=state.update_step + 1), None
 
     def init(self, key: Key) -> R2D2State:
         env_key, q_key, torso_key = jax.random.split(key, 3)
@@ -408,6 +411,7 @@ class R2D2:
 
         return R2D2State(
             step=0,
+            update_step=0,
             timestep=timestep,
             carry=carry,
             env_state=env_state,

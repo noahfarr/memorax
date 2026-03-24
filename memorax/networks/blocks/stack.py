@@ -36,7 +36,7 @@ class Stack(nn.Module, Block):
         done: Array | None = None,
         initial_carry: tuple[Carry, ...] | None = None,
         **kwargs,
-    ) -> tuple[tuple[Carry, ...], Array]:
+    ) -> tuple[tuple[Carry, ...] | None, Array]:
         if initial_carry is None:
             initial_carry = tuple(None for _ in self.blocks)
 
@@ -47,14 +47,18 @@ class Stack(nn.Module, Block):
             carry, x = block(x, done=done, initial_carry=initial_carry[i], **kwargs)
             carries.append(carry)
 
+        if all(c is None for c in carries):
+            return None, x
         return tuple(carries), x
 
     @nn.nowrap
-    def initialize_carry(self, key: Key, input_shape: tuple) -> tuple[Carry, ...]:
+    def initialize_carry(self, key: Key, input_shape: tuple) -> tuple[Carry, ...] | None:
         carries = []
         for block in self.blocks:
             if hasattr(block, "initialize_carry"):
                 carries.append(block.initialize_carry(key, input_shape))
             else:
                 carries.append(None)
+        if all(c is None for c in carries):
+            return None
         return tuple(carries)

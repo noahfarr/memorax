@@ -38,6 +38,7 @@ class SACConfig:
 @struct.dataclass(frozen=True)
 class SACState:
     step: int
+    update_step: int
     timestep: Timestep
     env_state: EnvState
     buffer_state: BufferState
@@ -243,6 +244,7 @@ class SAC:
 
         return SACState(
             step=0,
+            update_step=0,
             timestep=timestep,
             actor_carry=actor_carry,
             critic_carry=critic_carry,
@@ -283,11 +285,16 @@ class SAC:
             log_alpha = self.alpha_network.apply(alpha_params)
             alpha = jnp.exp(log_alpha)
             alpha_loss = (alpha * (-log_probs - target_entropy)).mean()
-            return alpha_loss, {"losses/alpha": alpha, "losses/alpha_loss": alpha_loss}
+            return alpha_loss, (alpha, alpha_loss)
 
-        (_, info), grads = jax.value_and_grad(alpha_loss_fn, has_aux=True)(
+        (_, (alpha, alpha_loss)), grads = jax.value_and_grad(alpha_loss_fn, has_aux=True)(
             state.alpha_params
         )
+        lox.log({
+            "losses/alpha/loss": alpha_loss,
+            "losses/alpha/value": alpha,
+            "training/alpha/gradient_norm": optax.global_norm(grads),
+        })
         updates, optimizer_state = self.alpha_optimizer.update(
             grads, state.alpha_optimizer_state, state.alpha_params
         )
@@ -297,7 +304,7 @@ class SAC:
             alpha_params=alpha_params, alpha_optimizer_state=optimizer_state
         )
 
-        return state, info
+        return state
 
     def _update_actor(
         self,
@@ -330,14 +337,16 @@ class SAC:
             )
             q = jnp.minimum(*qs)
             actor_loss = (log_probs * alpha - q).mean()
-            return actor_loss, (
-                carry,
-                {"losses/actor_loss": actor_loss, "losses/entropy": -log_probs.mean()},
-            )
+            return actor_loss, (carry, actor_loss, log_probs)
 
-        (_, (carry, info)), grads = jax.value_and_grad(actor_loss_fn, has_aux=True)(
+        (_, (carry, actor_loss, log_probs)), grads = jax.value_and_grad(actor_loss_fn, has_aux=True)(
             state.actor_params
         )
+        lox.log({
+            "losses/actor/loss": actor_loss,
+            "losses/actor/entropy": -log_probs.mean(),
+            "training/actor/gradient_norm": optax.global_norm(grads),
+        })
         updates, actor_optimizer_state = self.actor_optimizer.update(
             grads, state.actor_optimizer_state, state.actor_params
         )
@@ -347,7 +356,7 @@ class SAC:
             actor_params=actor_params, actor_optimizer_state=actor_optimizer_state
         )
 
-        return state, carry, info
+        return state, carry
 
     def _update_critic(
         self,
@@ -404,15 +413,17 @@ class SAC:
                 ).mean()
             )
 
-            return critic_loss, {
-                "losses/critic_loss": critic_loss,
-                "losses/q1": q1.mean(),
-                "losses/q2": q2.mean(),
-            }
+            return critic_loss, (critic_loss, q1, q2)
 
-        (_, info), grads = jax.value_and_grad(critic_loss_fn, has_aux=True)(
+        (_, (critic_loss, q1, q2)), grads = jax.value_and_grad(critic_loss_fn, has_aux=True)(
             state.critic_params
         )
+        lox.log({
+            "losses/critic/loss": critic_loss,
+            "losses/critic/q1": q1.mean(),
+            "losses/critic/q2": q2.mean(),
+            "training/critic/gradient_norm": optax.global_norm(grads),
+        })
         updates, critic_optimizer_state = self.critic_optimizer.update(
             grads, state.critic_optimizer_state, state.critic_params
         )
@@ -431,7 +442,7 @@ class SAC:
             critic_target_params=critic_target_params,
             critic_optimizer_state=critic_optimizer_state,
         )
-        return state, info
+        return state
 
     def _update(self, key: Key, state: SACState):
         batch_key, critic_key, actor_key, alpha_key = jax.random.split(key, 4)
@@ -485,7 +496,7 @@ class SAC:
                 lambda x: x[:, self.cfg.burn_in_length :], experience
             )
 
-        state, critic_info = self._update_critic(
+        state = self._update_critic(
             critic_key,
             state,
             experience,
@@ -493,20 +504,18 @@ class SAC:
             initial_critic_carry,
             initial_target_critic_carry,
         )
-        state, actor_carry, actor_info = self._update_actor(
+        state, actor_carry = self._update_actor(
             actor_key,
             state,
             experience,
             initial_actor_carry,
             initial_critic_carry,
         )
-        state, alpha_info = self._update_alpha(
+        state = self._update_alpha(
             alpha_key, state, experience, initial_actor_carry
         )
 
-        info = {**critic_info, **actor_info, **alpha_info}
-
-        return state, info
+        return state
 
     def _update_step(self, state: SACState, key: Key):
         step_key, gradient_key = jax.random.split(key)
@@ -518,18 +527,15 @@ class SAC:
             step_keys,
         )
 
-        def _gradient_step(state, key):
-            state, update_info = self._update(key, state)
-            return state, update_info
-
         gradient_keys = jax.random.split(gradient_key, self.cfg.gradient_steps)
-        state, update_info = jax.lax.scan(
-            _gradient_step, state, gradient_keys
+        state, _ = jax.lax.scan(
+            lambda state, key: (self._update(key, state), None),
+            state,
+            gradient_keys,
         )
-        update_info = jax.tree.map(lambda x: x.mean(axis=0), update_info)
-        lox.log(update_info)
+        lox.log({"training/step": state.step, "training/update_step": state.update_step})
 
-        return state, None
+        return state.replace(update_step=state.update_step + 1), None
 
     def warmup(self, key: Key, state: SACState, num_steps: int) -> SACState:
         step_keys = jax.random.split(key, num_steps // self.cfg.num_envs)

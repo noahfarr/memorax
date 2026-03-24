@@ -32,6 +32,7 @@ class ACLambdaConfig:
 @struct.dataclass(frozen=True)
 class ACLambdaState:
     step: int
+    update_step: int
     timestep: Timestep
     env_state: EnvState
     actor_params: core.FrozenDict[str, Any]
@@ -296,7 +297,9 @@ class ACLambda:
             "info": info,
             "intermediates": intermediates,
             "losses/td_error": td_error.mean(),
-            "losses/value": value.mean(),
+            "training/value": value.mean(),
+            "training/step": state.step,
+            "training/update_step": state.update_step,
         })
 
         state = state.replace(
@@ -316,7 +319,7 @@ class ACLambda:
             critic_carry=critic_carry,
         )
 
-        return state, None
+        return state.replace(update_step=state.update_step + 1), None
 
     def init(self, key: Key) -> ACLambdaState:
         (
@@ -378,6 +381,7 @@ class ACLambda:
 
         return ACLambdaState(
             step=0,
+            update_step=0,
             timestep=timestep.from_sequence(),
             env_state=env_state,
             actor_params=actor_params,

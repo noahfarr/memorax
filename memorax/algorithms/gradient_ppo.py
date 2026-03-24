@@ -38,6 +38,7 @@ class GradientPPOConfig:
 @struct.dataclass(frozen=True)
 class GradientPPOState:
     step: int
+    update_step: int
     timestep: Timestep
     env_state: EnvState
     actor_params: core.FrozenDict[str, Any]
@@ -263,6 +264,7 @@ class GradientPPO:
         (actor_loss, aux), actor_grads = jax.value_and_grad(
             actor_loss_fn, has_aux=True
         )(state.actor_params)
+        lox.log({"training/actor/gradient_norm": optax.global_norm(actor_grads)})
         actor_updates, actor_optimizer_state = self.actor_optimizer.update(
             actor_grads, state.actor_optimizer_state, state.actor_params
         )
@@ -322,11 +324,13 @@ class GradientPPO:
                 jax.lax.stop_gradient(h_values) * delta_lambda
                 - jax.lax.stop_gradient(delta_lambda - h_values) * values
             ).mean()
-            return critic_loss, delta_lambda
+            return critic_loss, (delta_lambda, values)
 
-        (critic_loss, delta_lambda), critic_grads = jax.value_and_grad(
+        (critic_loss, (delta_lambda, values)), critic_grads = jax.value_and_grad(
             critic_loss_fn, has_aux=True
         )(state.critic_params)
+        explained_variance = 1 - jnp.var(delta_lambda - values) / jnp.var(delta_lambda)
+        lox.log({"training/critic/gradient_norm": optax.global_norm(critic_grads), "training/critic/explained_variance": explained_variance})
         critic_updates, critic_optimizer_state = self.critic_optimizer.update(
             critic_grads, state.critic_optimizer_state, state.critic_params
         )
@@ -561,14 +565,16 @@ class GradientPPO:
 
         actor_loss, critic_loss, entropy, approximate_kl, clip_fraction = metrics
         lox.log({
-            "losses/actor_loss": actor_loss,
-            "losses/critic_loss": critic_loss,
+            "losses/actor/loss": actor_loss,
+            "losses/critic/loss": critic_loss,
             "losses/entropy": entropy,
-            "losses/approximate_kl": approximate_kl,
-            "losses/clip_fraction": clip_fraction,
+            "training/approximate_kl": approximate_kl,
+            "training/clip_fraction": clip_fraction,
+            "training/step": state.step,
+            "training/update_step": state.update_step,
         })
 
-        return state, None
+        return state.replace(update_step=state.update_step + 1), None
 
     def init(self, key: Key) -> GradientPPOState:
         (
@@ -644,6 +650,7 @@ class GradientPPO:
 
         return GradientPPOState(
             step=0,
+            update_step=0,
             timestep=timestep.from_sequence(),
             actor_carry=actor_carry,
             critic_carry=critic_carry,

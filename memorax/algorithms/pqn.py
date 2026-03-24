@@ -39,6 +39,7 @@ class PQNConfig:
 @struct.dataclass(frozen=True)
 class PQNState:
     step: int
+    update_step: int
     timestep: Timestep
     env_state: EnvState
     params: core.FrozenDict[str, Any]
@@ -264,6 +265,7 @@ class PQN:
             )
 
         (loss, aux), grads = jax.value_and_grad(loss_fn, has_aux=True)(state.params)
+        lox.log({"training/gradient_norm": optax.global_norm(grads)})
         updates, optimizer_state = self.optimizer.update(
             grads, state.optimizer_state, state.params
         )
@@ -321,15 +323,17 @@ class PQN:
         lox.log(
             {
                 "losses/loss": loss,
-                "losses/q_value": q_value,
-                "losses/q_value_min": q_value_min,
-                "losses/q_value_max": q_value_max,
+                "training/q_value": q_value,
+                "training/q_value_min": q_value_min,
+                "training/q_value_max": q_value_max,
                 "losses/td_error": td_error,
-                "losses/epsilon": self.epsilon_schedule(state.step),
+                "training/epsilon": self.epsilon_schedule(state.step),
+                "training/step": state.step,
+                "training/update_step": state.update_step,
             }
         )
 
-        return state, None
+        return state.replace(update_step=state.update_step + 1), None
 
     def init(self, key: Key) -> PQNState:
         env_key, q_key, torso_key = jax.random.split(key, 3)
@@ -361,6 +365,7 @@ class PQN:
 
         return PQNState(
             step=0,
+            update_step=0,
             timestep=timestep.from_sequence(),
             carry=carry,
             env_state=env_state,

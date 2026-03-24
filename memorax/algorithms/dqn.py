@@ -41,6 +41,7 @@ class DQNConfig:
 @struct.dataclass(frozen=True)
 class DQNState:
     step: int
+    update_step: int
     timestep: Timestep
     carry: tuple
     env_state: EnvState
@@ -245,6 +246,7 @@ class DQN:
         (loss, (q_value, td_error, carry)), grads = jax.value_and_grad(
             loss_fn, has_aux=True
         )(state.params)
+        lox.log({"training/gradient_norm": optax.global_norm(grads)})
         updates, optimizer_state = self.optimizer.update(
             grads, state.optimizer_state, state.params
         )
@@ -257,7 +259,7 @@ class DQN:
             self.cfg.tau,
         )
 
-        lox.log({"losses/loss": loss, "losses/q_value": q_value.mean()})
+        lox.log({"losses/loss": loss, "training/q_value": q_value.mean(), "losses/td_error": td_error.mean(), "training/epsilon": self.epsilon_schedule(state.step), "training/step": state.step, "training/update_step": state.update_step})
 
         state = state.replace(
             params=params,
@@ -279,7 +281,7 @@ class DQN:
 
         state = self._update(update_key, state)
 
-        return state, None
+        return state.replace(update_step=state.update_step + 1), None
 
     def init(self, key: Key) -> DQNState:
         env_key, q_key, torso_key = jax.random.split(key, 3)
@@ -319,6 +321,7 @@ class DQN:
 
         return DQNState(
             step=0,
+            update_step=0,
             timestep=timestep,
             carry=carry,
             env_state=env_state,
