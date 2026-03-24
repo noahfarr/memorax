@@ -330,7 +330,7 @@ class GradientPPO:
             critic_loss_fn, has_aux=True
         )(state.critic_params)
         explained_variance = 1 - jnp.var(delta_lambda - values) / jnp.var(delta_lambda)
-        lox.log({"training/critic/gradient_norm": optax.global_norm(critic_grads), "training/critic/explained_variance": explained_variance})
+        lox.log({"training/critic/gradient_norm": optax.global_norm(critic_grads), "training/critic/explained_variance": explained_variance, "training/value": values.mean()})
         critic_updates, critic_optimizer_state = self.critic_optimizer.update(
             critic_grads, state.critic_optimizer_state, state.critic_params
         )
@@ -567,7 +567,7 @@ class GradientPPO:
         lox.log({
             "losses/actor/loss": actor_loss,
             "losses/critic/loss": critic_loss,
-            "losses/entropy": entropy,
+            "losses/actor/entropy": entropy,
             "training/approximate_kl": approximate_kl,
             "training/clip_fraction": clip_fraction,
             "training/step": state.step,

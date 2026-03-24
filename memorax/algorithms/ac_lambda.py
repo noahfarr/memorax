@@ -191,6 +191,7 @@ class ACLambda:
             mutable=["intermediates"],
         )
         action, log_prob = probs.sample_and_log_prob(seed=action_key)
+        entropy = remove_time_axis(probs.entropy()).mean()
         action = remove_time_axis(action)
         log_prob = remove_time_axis(log_prob)
 
@@ -297,6 +298,7 @@ class ACLambda:
             "info": info,
             "intermediates": intermediates,
             "losses/td_error": td_error.mean(),
+            "losses/actor/entropy": entropy,
             "training/value": value.mean(),
             "training/step": state.step,
             "training/update_step": state.update_step,

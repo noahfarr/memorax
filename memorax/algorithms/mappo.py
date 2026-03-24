@@ -351,7 +351,7 @@ class MAPPO:
             state.critic_params
         )
         explained_variance = 1 - jnp.var(returns - values) / jnp.var(returns)
-        lox.log({"training/critic/gradient_norm": optax.global_norm(critic_grads), "training/critic/explained_variance": explained_variance})
+        lox.log({"training/critic/gradient_norm": optax.global_norm(critic_grads), "training/critic/explained_variance": explained_variance, "training/value": values.mean()})
         critic_updates, critic_optimizer_state = self.critic_optimizer.update(
             critic_grads, state.critic_optimizer_state, state.critic_params
         )
@@ -555,7 +555,7 @@ class MAPPO:
             {
                 "losses/actor/loss": actor_loss,
                 "losses/critic/loss": critic_loss,
-                "losses/entropy": entropy,
+                "losses/actor/entropy": entropy,
                 "training/approximate_kl": approximate_kl,
                 "training/clip_fraction": clip_fraction,
                 "training/step": state.step,

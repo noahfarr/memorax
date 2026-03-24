@@ -259,8 +259,6 @@ class PQN:
             ).mean()
             return loss, (
                 q_value.mean(),
-                q_value.min(),
-                q_value.max(),
                 jnp.abs(td_error).mean(),
             )
 
@@ -319,13 +317,11 @@ class PQN:
             epoch_keys,
         )
 
-        loss, q_value, q_value_min, q_value_max, td_error = metrics
+        loss, q_value, td_error = metrics
         lox.log(
             {
                 "losses/loss": loss,
                 "training/q_value": q_value,
-                "training/q_value_min": q_value_min,
-                "training/q_value_max": q_value_max,
                 "losses/td_error": td_error,
                 "training/epsilon": self.epsilon_schedule(state.step),
                 "training/step": state.step,
