@@ -20,7 +20,9 @@ from memorax.utils.typing import PyTree
 
 
 class DashboardLogger:
-    def __init__(self, total_timesteps=0, refresh_per_second=10, summary=None, **kwargs):
+    def __init__(
+        self, total_timesteps=0, refresh_per_second=10, summary=None, **kwargs
+    ):
         self.summary = summary or {}
 
         self.console = Console()
@@ -74,7 +76,7 @@ class DashboardLogger:
         table.add_column(heading, justify="left", width=20, style="yellow")
         table.add_column("Value", justify="right", width=10, style="green")
         for name, value in metrics.items():
-            table.add_row(name, f"{jnp.mean(value):.3f}")
+            table.add_row(name, f"{jnp.mean(value):.3f} ± {jnp.std(value):.3f}")
         return table
 
     def build_dashboard(

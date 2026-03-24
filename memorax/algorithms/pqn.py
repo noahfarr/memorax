@@ -260,9 +260,7 @@ class PQN:
                 q_value.mean(),
                 q_value.min(),
                 q_value.max(),
-                q_value.std(),
                 jnp.abs(td_error).mean(),
-                td_error.std(),
             )
 
         (loss, aux), grads = jax.value_and_grad(loss_fn, has_aux=True)(state.params)
@@ -319,18 +317,14 @@ class PQN:
             epoch_keys,
         )
 
-        loss, q_value, q_value_min, q_value_max, q_value_std, td_error, td_error_std = (
-            metrics
-        )
+        loss, q_value, q_value_min, q_value_max, td_error = metrics
         lox.log(
             {
                 "losses/loss": loss,
                 "losses/q_value": q_value,
                 "losses/q_value_min": q_value_min,
                 "losses/q_value_max": q_value_max,
-                "losses/q_value_std": q_value_std,
                 "losses/td_error": td_error,
-                "losses/td_error_std": td_error_std,
                 "losses/epsilon": self.epsilon_schedule(state.step),
             }
         )
