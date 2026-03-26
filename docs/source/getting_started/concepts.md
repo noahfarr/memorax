@@ -72,14 +72,14 @@ Networks follow the `FeatureExtractor → Torso → Head` pipeline shown above. 
 
 ```python
 import flax.linen as nn
-from memorax.networks import FeatureExtractor, Network, RNN, Memoroid, MambaCell, heads
+from memorax.networks import FeatureExtractor, Network, RNN, Memoroid, Mamba2Cell, Mamba2Config, heads
 
 feature_extractor = FeatureExtractor(
     observation_extractor=nn.Sequential((nn.Dense(64), nn.relu)),
 )
 
 actor = Network(feature_extractor, torso=RNN(cell=nn.GRUCell(features=64)), head=heads.Categorical(action_dim=4))
-critic = Network(feature_extractor, torso=Memoroid(cell=MambaCell(features=64)), head=heads.VNetwork())
+critic = Network(feature_extractor, torso=Memoroid(cell=Mamba2Cell(config=Mamba2Config(features=64))), head=heads.VNetwork())
 ```
 
 See the {doc}`../guides/networks` guide for the full list of available torsos, heads, and composable blocks.

@@ -97,7 +97,7 @@ from memorax.algorithms import PPO, PPOConfig
 from memorax.environments import environment
 from memorax.networks import (
     FFN, ALiBi, FeatureExtractor, GatedResidual, Network,
-    PreNorm, SegmentRecurrence, SelfAttention, Stack, heads,
+    PreNorm, SegmentRecurrence, SelfAttention, SelfAttentionConfig, Stack, heads,
 )
 
 env, env_params = environment.make("gymnax::CartPole-v1")
@@ -117,7 +117,7 @@ cfg = PPOConfig(
 features, num_heads, num_layers = 64, 4, 2
 feature_extractor = FeatureExtractor(observation_extractor=nn.Sequential((nn.Dense(features), nn.relu)))
 attention = GatedResidual(PreNorm(SegmentRecurrence(
-    SelfAttention(features, num_heads, context_length=128, positional_embedding=ALiBi(num_heads)),
+    SelfAttention(config=SelfAttentionConfig(features=features, num_heads=num_heads, context_length=128, positional_embedding=ALiBi(num_heads))),
     memory_length=64, features=features,
 )))
 ffn = GatedResidual(PreNorm(FFN(features=features, expansion_factor=4)))

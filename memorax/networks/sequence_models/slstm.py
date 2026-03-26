@@ -2,6 +2,7 @@ from functools import partial
 import jax
 import jax.numpy as jnp
 from flax import linen as nn
+from flax import struct
 from flax.linen import initializers
 from flax.linen.recurrent import RNNCellBase
 from flax.typing import Dtype
@@ -14,23 +15,8 @@ from memorax.networks.initializers import powerlaw
 from memorax.utils.axes import add_time_axis, remove_time_axis
 
 
-class sLSTMCell(RNNCellBase):
-    """Scalar LSTM Cell compatible with Flax's RNNCellBase.
-
-    This cell can be used directly with the RNN wrapper or nn.RNN.
-
-    Attributes:
-        features: Output feature dimension.
-        hidden_dim: Hidden state dimension.
-        num_heads: Number of attention heads.
-        use_causal_conv: Whether to use causal convolution.
-        conv_kernel_size: Kernel size for causal convolution.
-        eps: Epsilon for numerical stability.
-        dropout_rate: Dropout rate.
-        dtype: Data type for computation.
-        param_dtype: Data type for parameters.
-    """
-
+@struct.dataclass
+class sLSTMConfig:
     features: int
     hidden_dim: int
     num_heads: int = 4
@@ -41,34 +27,47 @@ class sLSTMCell(RNNCellBase):
     dtype: Dtype | None = None
     param_dtype: Dtype = jnp.float32
 
+
+@struct.dataclass
+class sLSTMCarry:
+    cell: Array
+    normalizer: Array
+    max_log: Array
+    hidden: Array
+    buffer: Array
+
+
+class sLSTMCell(RNNCellBase):
+    config: sLSTMConfig
+
     def setup(self):
-        head_dim = self.hidden_dim // self.num_heads
-        if self.hidden_dim % self.num_heads != 0:
+        head_dim = self.config.hidden_dim // self.config.num_heads
+        if self.config.hidden_dim % self.config.num_heads != 0:
             raise ValueError(
-                f"hidden_dim ({self.hidden_dim}) must be divisible by num_heads ({self.num_heads})."
+                f"hidden_dim ({self.config.hidden_dim}) must be divisible by num_heads ({self.config.num_heads})."
             )
 
         self.input_projection = nn.Dense(
-            features=self.hidden_dim,
+            features=self.config.hidden_dim,
             use_bias=False,
-            dtype=self.dtype,
-            param_dtype=self.param_dtype,
+            dtype=self.config.dtype,
+            param_dtype=self.config.param_dtype,
         )
 
-        if self.use_causal_conv:
+        if self.config.use_causal_conv:
             self.causal_conv = CausalConv1d(
-                features=self.hidden_dim,
-                kernel_size=self.conv_kernel_size,
-                param_dtype=self.param_dtype,
+                features=self.config.hidden_dim,
+                kernel_size=self.config.conv_kernel_size,
+                param_dtype=self.config.param_dtype,
             )
 
         gate = partial(
             BlockDiagonalDense,
-            self.hidden_dim,
-            num_heads=self.num_heads,
+            self.config.hidden_dim,
+            num_heads=self.config.num_heads,
             use_bias=False,
-            dtype=self.dtype,
-            param_dtype=self.param_dtype,
+            dtype=self.config.dtype,
+            param_dtype=self.config.param_dtype,
         )
 
         self.i_gate = gate()
@@ -78,12 +77,12 @@ class sLSTMCell(RNNCellBase):
 
         recurrent_gate = partial(
             BlockDiagonalDense,
-            self.hidden_dim,
-            num_heads=self.num_heads,
+            self.config.hidden_dim,
+            num_heads=self.config.num_heads,
             use_bias=False,
             kernel_init=nn.initializers.zeros_init(),
-            dtype=self.dtype,
-            param_dtype=self.param_dtype,
+            dtype=self.config.dtype,
+            param_dtype=self.config.param_dtype,
         )
 
         self.ri = recurrent_gate()
@@ -94,55 +93,46 @@ class sLSTMCell(RNNCellBase):
         self.i_bias = self.param(
             "i_bias",
             nn.initializers.zeros_init(),
-            (self.hidden_dim,),
-            self.param_dtype,
+            (self.config.hidden_dim,),
+            self.config.param_dtype,
         )
         self.f_bias = self.param(
             "f_bias",
-            powerlaw(self.num_heads, head_dim=head_dim),
-            (self.hidden_dim,),
-            self.param_dtype,
+            powerlaw(self.config.num_heads, head_dim=head_dim),
+            (self.config.hidden_dim,),
+            self.config.param_dtype,
         )
         self.z_bias = self.param(
             "z_bias",
             nn.initializers.zeros_init(),
-            (self.hidden_dim,),
-            self.param_dtype,
+            (self.config.hidden_dim,),
+            self.config.param_dtype,
         )
         self.o_bias = self.param(
             "o_bias",
             nn.initializers.zeros_init(),
-            (self.hidden_dim,),
-            self.param_dtype,
+            (self.config.hidden_dim,),
+            self.config.param_dtype,
         )
 
-        self.drop = nn.Dropout(rate=self.dropout_rate)
+        self.drop = nn.Dropout(rate=self.config.dropout_rate)
         self.norm = MultiHeadLayerNorm(use_scale=True, use_bias=False)
         self.output_projection = nn.Dense(
-            features=self.features,
+            features=self.config.features,
             use_bias=False,
-            dtype=self.dtype,
-            param_dtype=self.param_dtype,
+            dtype=self.config.dtype,
+            param_dtype=self.config.param_dtype,
         )
 
-    def __call__(self, carry: tuple, inputs: Array) -> tuple[tuple, Array]:
-        """Process a single timestep.
-
-        Args:
-            carry: Tuple of ((c, n, m, h), buffer)
-            inputs: Input tensor of shape (B, F)
-
-        Returns:
-            Tuple of (new_carry, outputs) where outputs has shape (B, features)
-        """
-        (c, n, m, h), buffer = carry
+    def __call__(self, carry: sLSTMCarry, inputs: Array) -> tuple[sLSTMCarry, Array]:
+        c, n, m, h, buffer = carry.cell, carry.normalizer, carry.max_log, carry.hidden, carry.buffer
 
         B, *_ = inputs.shape
-        head_dim = self.hidden_dim // self.num_heads
+        head_dim = self.config.hidden_dim // self.config.num_heads
 
         x = self.input_projection(inputs)
 
-        if self.use_causal_conv:
+        if self.config.use_causal_conv:
             buffer, u = self.causal_conv(add_time_axis(x), buffer)
             u = jax.nn.silu(remove_time_axis(u))
         else:
@@ -161,45 +151,36 @@ class sLSTMCell(RNNCellBase):
 
         c = f * c + i * nn.tanh(z)
         n = f * n + i
-        h = o * (c / jnp.maximum(n, self.eps))
+        h = o * (c / jnp.maximum(n, self.config.eps))
 
         y = self.drop(h, deterministic=not self.has_rng("dropout"))
-        y = self.norm(y.reshape(B, self.num_heads, 1, head_dim))
-        y = self.output_projection(y.reshape(B, self.hidden_dim))
+        y = self.norm(y.reshape(B, self.config.num_heads, 1, head_dim))
+        y = self.output_projection(y.reshape(B, self.config.hidden_dim))
 
-        return ((c, n, m, h), buffer), y
+        return sLSTMCarry(cell=c, normalizer=n, max_log=m, hidden=h, buffer=buffer), y
 
     @nn.nowrap
     def initialize_carry(
         self,
         key: jax.Array,
         input_shape: tuple[int, ...],
-    ) -> tuple:
-        """Initialize the carry state.
-
-        Args:
-            key: Random key for initialization.
-            input_shape: Shape of input (batch_size, features).
-
-        Returns:
-            Initial carry tuple of ((c, n, m, h), buffer).
-        """
+    ) -> sLSTMCarry:
         *batch_dims, _ = input_shape
         carry_init = initializers.zeros_init()
 
         key_c, key_n, key_h, key_m, key_buf = random.split(key, 5)
-        mem_shape = (*batch_dims, self.hidden_dim)
+        mem_shape = (*batch_dims, self.config.hidden_dim)
 
-        c = carry_init(key_c, mem_shape, self.param_dtype)
-        n = carry_init(key_n, mem_shape, self.param_dtype)
-        m = carry_init(key_m, mem_shape, self.param_dtype)
-        h = carry_init(key_h, mem_shape, self.param_dtype)
+        c = carry_init(key_c, mem_shape, self.config.param_dtype)
+        n = carry_init(key_n, mem_shape, self.config.param_dtype)
+        m = carry_init(key_m, mem_shape, self.config.param_dtype)
+        h = carry_init(key_h, mem_shape, self.config.param_dtype)
 
         buffer = carry_init(
-            key_buf, (*batch_dims, self.conv_kernel_size, self.hidden_dim)
+            key_buf, (*batch_dims, self.config.conv_kernel_size, self.config.hidden_dim)
         )
 
-        return (c, n, m, h), buffer
+        return sLSTMCarry(cell=c, normalizer=n, max_log=m, hidden=h, buffer=buffer)
 
     @property
     def num_feature_axes(self) -> int:

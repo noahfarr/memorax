@@ -72,76 +72,78 @@ from .sequence_model import SequenceModel
 
 
 @struct.dataclass
-class Carry:
+class SelfAttentionConfig:
+    features: int
+    num_heads: int
+    context_length: int
+    dtype: Dtype = jnp.float32
+    param_dtype: Dtype = jnp.float32
+    kernel_init: Initializer = struct.field(pytree_node=False, default=nn.initializers.lecun_normal())
+    bias_init: Initializer = struct.field(pytree_node=False, default=nn.initializers.zeros_init())
+    positional_embedding: RelativePositionalEmbedding = struct.field(
+        pytree_node=False,
+        default=lambda query, key, query_pos, key_pos: (query, key, None),
+    )
+
+
+@struct.dataclass
+class SelfAttentionCarry:
     done: Array
     key: Array
     value: Array
 
 
 class SelfAttention(SequenceModel):
-    features: int
-    num_heads: int
-    context_length: int
-    dtype: Dtype = jnp.float32
-    param_dtype: Dtype = jnp.float32
-    kernel_init: Initializer = nn.initializers.lecun_normal()
-    bias_init: Initializer = nn.initializers.zeros_init()
-    positional_embedding: RelativePositionalEmbedding = (
-        lambda query, key, query_pos, key_pos: (
-            query,
-            key,
-            None,
-        )
-    )
+    config: SelfAttentionConfig
 
     def setup(self):
-        head_dim = self.features // self.num_heads
+        head_dim = self.config.features // self.config.num_heads
 
         projection = partial(
             nn.DenseGeneral,
-            features=(self.num_heads, head_dim),
-            dtype=self.dtype,
-            param_dtype=self.param_dtype,
-            kernel_init=self.kernel_init,
-            bias_init=self.bias_init,
+            features=(self.config.num_heads, head_dim),
+            dtype=self.config.dtype,
+            param_dtype=self.config.param_dtype,
+            kernel_init=self.config.kernel_init,
+            bias_init=self.config.bias_init,
         )
 
         self.query = projection()
         self.key = projection()
         self.value = projection()
         self.output_projection = nn.DenseGeneral(
-            self.features,
+            self.config.features,
             axis=(-2, -1),
-            dtype=self.dtype,
-            param_dtype=self.param_dtype,
-            kernel_init=self.kernel_init,
-            bias_init=self.bias_init,
+            dtype=self.config.dtype,
+            param_dtype=self.config.param_dtype,
+            kernel_init=self.config.kernel_init,
+            bias_init=self.config.bias_init,
         )
 
     @nn.nowrap
-    def initialize_carry(self, key: Key, input_shape: tuple) -> Carry:
+    def initialize_carry(self, key: Key, input_shape: tuple) -> SelfAttentionCarry:
         *batch_dims, _ = input_shape
-        head_dim = self.features // self.num_heads
-        done = jnp.ones((*batch_dims, self.context_length), dtype=jnp.int32)
+        head_dim = self.config.features // self.config.num_heads
+        done = jnp.ones((*batch_dims, self.config.context_length), dtype=jnp.int32)
         key = jnp.zeros(
-            (*batch_dims, self.context_length, self.num_heads, head_dim),
-            dtype=self.dtype,
+            (*batch_dims, self.config.context_length, self.config.num_heads, head_dim),
+            dtype=self.config.dtype,
         )
         value = jnp.zeros(
-            (*batch_dims, self.context_length, self.num_heads, head_dim),
-            dtype=self.dtype,
+            (*batch_dims, self.config.context_length, self.config.num_heads, head_dim),
+            dtype=self.config.dtype,
         )
-        return Carry(done, key, value)
+        return SelfAttentionCarry(done, key, value)
 
     def __call__(
         self,
         x,
         done,
-        initial_carry: Carry | None = None,
+        initial_carry: SelfAttentionCarry | None = None,
         memory: Array | None = None,
         memory_done: Array | None = None,
         **kwargs,
-    ) -> tuple[Carry, Array]:
+    ) -> tuple[SelfAttentionCarry, Array]:
         if initial_carry is None:
             input_shape = get_input_shape(x)
             initial_carry = self.initialize_carry(jax.random.key(0), input_shape)
@@ -149,32 +151,32 @@ class SelfAttention(SequenceModel):
         B, T, *_ = x.shape
 
         if memory is None:
-            memory = jnp.zeros((B, 0, self.features), dtype=self.dtype)
+            memory = jnp.zeros((B, 0, self.config.features), dtype=self.config.dtype)
             memory_done = jnp.zeros((B, 0), dtype=jnp.int32)
 
         _, M, *_ = memory.shape
 
         assert (
-            T <= self.context_length
-        ), f"T must be less than or equal to context_length, but was T: {T}, context_length: {self.context_length}"
+            T <= self.config.context_length
+        ), f"T must be less than or equal to context_length, but was T: {T}, context_length: {self.config.context_length}"
 
         query = self.query(x)
 
         key = self.key(jnp.concatenate([memory, x], axis=1))
         key = jnp.concatenate([key[:, :M], initial_carry.key, key[:, M:]], axis=1)
-        key = key[:, -(M + self.context_length) :]
+        key = key[:, -(M + self.config.context_length) :]
 
         value = self.value(jnp.concatenate([memory, x], axis=1))
         value = jnp.concatenate(
             [value[:, :M], initial_carry.value, value[:, M:]], axis=1
         )
-        value = value[:, -(M + self.context_length) :]
+        value = value[:, -(M + self.config.context_length) :]
 
         attention_mask, query_input, key_input = get_attention_mask(
-            done, initial_carry, memory_done, self.context_length, self.num_heads
+            done, initial_carry, memory_done, self.config.context_length, self.config.num_heads
         )
 
-        query, key, bias = self.positional_embedding(query, key, query_input, key_input)
+        query, key, bias = self.config.positional_embedding(query, key, query_input, key_input)
 
         implementation, attention_dtype = get_attention_implementation()
         x = jax.nn.dot_product_attention(
@@ -184,15 +186,15 @@ class SelfAttention(SequenceModel):
             bias=bias,
             mask=attention_mask,
             implementation=implementation,
-        ).astype(self.dtype)
+        ).astype(self.config.dtype)
 
         y = self.output_projection(x)
 
         done = jnp.concatenate([initial_carry.done, done], axis=1)[
-            :, -self.context_length :
+            :, -self.config.context_length :
         ]
-        key = key[:, -self.context_length :]
-        value = value[:, -self.context_length :]
+        key = key[:, -self.config.context_length :]
+        value = value[:, -self.config.context_length :]
         carry = initial_carry.replace(done=done, key=key, value=value)
 
         return carry, y

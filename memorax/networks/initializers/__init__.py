@@ -17,5 +17,7 @@ from .powerlaw import powerlaw
 from .small import small
 from .sparse import sparse
 from .uniform import bounded_uniform
+from .inverse_softplus import inverse_softplus
+from .log_uniform import log_uniform
 from .wang import wang
 from .xavier import xavier_uniform

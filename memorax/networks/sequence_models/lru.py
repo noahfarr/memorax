@@ -2,6 +2,7 @@ from functools import partial
 
 import jax
 import jax.numpy as jnp
+from flax import struct
 from flax.typing import Dtype
 
 from memorax.utils.typing import Array, Carry, Key
@@ -29,25 +30,36 @@ def _matrix_init(key, shape, dtype=jnp.float32, normalization=1):
     return jax.random.normal(key=key, shape=shape, dtype=dtype) / normalization
 
 
-class LRUCell(MemoroidCellBase):
+@struct.dataclass
+class LRUConfig:
     features: int
     hidden_dim: int
     r_min: float = 0.0
     r_max: float = 1.0
     max_phase: float = 6.28
-    dtype: Dtype = jnp.float32
+    dtype: Dtype | None = None
     param_dtype: Dtype = jnp.float32
+
+
+@struct.dataclass
+class LRUCarry:
+    state: Array
+    decay: Array
+
+
+class LRUCell(MemoroidCellBase):
+    config: LRUConfig
 
     def setup(self):
         self.theta_log = self.param(
             "theta_log",
-            partial(_theta_init, max_phase=self.max_phase),
-            (self.hidden_dim,),
+            partial(_theta_init, max_phase=self.config.max_phase),
+            (self.config.hidden_dim,),
         )
         self.nu_log = self.param(
             "nu_log",
-            partial(_nu_init, r_min=self.r_min, r_max=self.r_max),
-            (self.hidden_dim,),
+            partial(_nu_init, r_min=self.config.r_min, r_max=self.config.r_max),
+            (self.config.hidden_dim,),
         )
         self.gamma_log = self.param(
             "gamma_log", _gamma_log_init, (self.nu_log, self.theta_log)
@@ -55,84 +67,82 @@ class LRUCell(MemoroidCellBase):
 
         self.B_real = self.param(
             "B_real",
-            partial(_matrix_init, normalization=jnp.sqrt(2 * self.features)),
-            (self.hidden_dim, self.features),
+            partial(_matrix_init, normalization=jnp.sqrt(2 * self.config.features)),
+            (self.config.hidden_dim, self.config.features),
         )
         self.B_imag = self.param(
             "B_imag",
-            partial(_matrix_init, normalization=jnp.sqrt(2 * self.features)),
-            (self.hidden_dim, self.features),
+            partial(_matrix_init, normalization=jnp.sqrt(2 * self.config.features)),
+            (self.config.hidden_dim, self.config.features),
         )
         self.C_real = self.param(
             "C_real",
-            partial(_matrix_init, normalization=jnp.sqrt(self.hidden_dim)),
-            (self.features, self.hidden_dim),
+            partial(_matrix_init, normalization=jnp.sqrt(self.config.hidden_dim)),
+            (self.config.features, self.config.hidden_dim),
         )
         self.C_imag = self.param(
             "C_imag",
-            partial(_matrix_init, normalization=jnp.sqrt(self.hidden_dim)),
-            (self.features, self.hidden_dim),
+            partial(_matrix_init, normalization=jnp.sqrt(self.config.hidden_dim)),
+            (self.config.features, self.config.hidden_dim),
         )
-        self.D = self.param("D", _matrix_init, (self.features,))
+        self.D = self.param("D", _matrix_init, (self.config.features,))
 
     def __call__(self, x: Array, **kwargs) -> Carry:
         B, T, _ = x.shape
 
         diag_lambda = jnp.exp(-jnp.exp(self.nu_log) + 1j * jnp.exp(self.theta_log))
-        B_norm = (self.B_real + 1j * self.B_imag) * jnp.expand_dims(
-            jnp.exp(self.gamma_log), axis=-1
-        )
+        B_norm = (self.B_real + 1j * self.B_imag) * jnp.exp(self.gamma_log)[:, None]
 
-        decay = jnp.broadcast_to(diag_lambda, (B, T, self.hidden_dim))
+        decay = jnp.broadcast_to(diag_lambda, (B, T, self.config.hidden_dim))
 
-        state = jax.vmap(jax.vmap(lambda u: B_norm @ u))(x)
+        state = jnp.einsum('ij,btj->bti', B_norm, x)
 
-        return (state, decay)
+        return LRUCarry(state=state, decay=decay)
 
     def binary_operator(self, a: Carry, b: Carry) -> Carry:
-        state_i, decay_i = a
-        state_j, decay_j = b
-        return (decay_j * state_i + state_j, decay_j * decay_i)
+        return LRUCarry(
+            state=b.decay * a.state + b.state,
+            decay=b.decay * a.decay,
+        )
 
     def read(self, h: Carry, x: Array, **kwargs) -> Array:
         C = jax.lax.complex(self.C_real, self.C_imag)
-        state, _ = h
-
-        y = jax.vmap(jax.vmap(lambda si, xi: (C @ si).real + self.D * xi))(state, x)
+        y = jnp.einsum('ij,btj->bti', C, h.state).real + self.D * x
         return y
 
     def initialize_carry(self, key: jax.Array, input_shape: tuple[int, ...]) -> Carry:
         *batch_dims, _ = input_shape
-        state = jnp.zeros((*batch_dims, 1, self.hidden_dim), dtype=jnp.complex64)
-        decay = jnp.ones((*batch_dims, 1, self.hidden_dim), dtype=jnp.complex64)
-        return (state, decay)
+        state = jnp.zeros((*batch_dims, 1, self.config.hidden_dim), dtype=jnp.complex64)
+        decay = jnp.ones((*batch_dims, 1, self.config.hidden_dim), dtype=jnp.complex64)
+        return LRUCarry(state=state, decay=decay)
+
+    def inject_phantom(self, carry: Carry, phantom: Array) -> Carry:
+        return carry.replace(state=jax.lax.stop_gradient(carry.state) + phantom)
 
     def local_jacobian(self, carry, z, inputs, **kwargs) -> tuple[Array, dict]:
-        prev_state = carry[0]
-        state_contrib, _ = z
         lam = jnp.exp(-jnp.exp(self.nu_log) + 1j * jnp.exp(self.theta_log))
         gamma_exp = jnp.exp(self.gamma_log)
 
         B, T = inputs.shape[:2]
-        decay_3d = jnp.broadcast_to(lam, (B, T, self.hidden_dim))
+        decay_3d = jnp.broadcast_to(lam, (B, T, self.config.hidden_dim))
 
         return decay_3d, {
-            "nu_log": -jnp.exp(self.nu_log) * lam * prev_state,
-            "theta_log": 1j * jnp.exp(self.theta_log) * lam * prev_state,
-            "gamma_log": state_contrib,
-            "B_real": gamma_exp[None, None, :, None] * inputs[:, :, None, :],
-            "B_imag": 1j * gamma_exp[None, None, :, None] * inputs[:, :, None, :],
+            "nu_log": -jnp.exp(self.nu_log) * lam * carry.state,
+            "theta_log": 1j * jnp.exp(self.theta_log) * lam * carry.state,
+            "gamma_log": z.state,
+            "B_real": jnp.einsum('h,btf->bthf', gamma_exp, inputs),
+            "B_imag": 1j * jnp.einsum('h,btf->bthf', gamma_exp, inputs),
         }
 
     def initialize_sensitivity(self, key: Key, input_shape: tuple) -> dict:
         *batch_dims, _ = input_shape
-        H = self.hidden_dim
+        H = self.config.hidden_dim
         z = lambda *s: jnp.zeros((*batch_dims, 1, *s), dtype=jnp.complex64)
         sensitivity = {
             "nu_log": z(H),
             "theta_log": z(H),
             "gamma_log": z(H),
-            "B_real": z(H, self.features),
-            "B_imag": z(H, self.features),
+            "B_real": z(H, self.config.features),
+            "B_imag": z(H, self.config.features),
         }
         return sensitivity

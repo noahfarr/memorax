@@ -21,7 +21,9 @@ Memoroid Models
 
 :class:`MemoroidCellBase` - Base class for memoroid cells.
 
-:class:`MambaCell` - Selective State Space Model cell.
+:class:`Mamba2Cell` - Selective State Space Model cell (Mamba-2).
+
+:class:`Mamba3Cell` - State Space Model with trapezoidal discretization and complex state (Mamba-3).
 
 :class:`S5Cell` - Simplified Structured State Space cell.
 
@@ -60,7 +62,8 @@ Wrappers
    SHMCell
    Memoroid
    MemoroidCellBase
-   MambaCell
+   Mamba2Cell
+   Mamba3Cell
    S5Cell
    LRUCell
    MinGRUCell

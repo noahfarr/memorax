@@ -29,17 +29,17 @@ gru_torso = RNN(cell=nn.GRUCell(features=64))
 Scalar LSTM with enhanced gating and feature normalization:
 
 ```python
-from memorax.networks import RNN, sLSTMCell
+from memorax.networks import RNN, sLSTMCell, sLSTMConfig
 
-slstm = RNN(cell=sLSTMCell(features=64))
+slstm = RNN(cell=sLSTMCell(config=sLSTMConfig(features=64, hidden_dim=64)))
 ```
 
 ### SHM (Stable Hadamard Memory)
 
 ```python
-from memorax.networks import RNN, SHMCell
+from memorax.networks import RNN, SHMCell, SHMConfig
 
-shm = RNN(cell=SHMCell(features=64, output_features=32))
+shm = RNN(cell=SHMCell(config=SHMConfig(features=64, output_features=32)))
 ```
 
 ## State Space Models
@@ -49,9 +49,9 @@ All state space models use the `Memoroid` wrapper for parallel scan execution.
 ### LRU (Linear Recurrent Unit)
 
 ```python
-from memorax.networks import Memoroid, LRUCell
+from memorax.networks import Memoroid, LRUCell, LRUConfig
 
-lru = Memoroid(cell=LRUCell(features=64, hidden_dim=64))
+lru = Memoroid(cell=LRUCell(config=LRUConfig(features=64, hidden_dim=64)))
 ```
 
 ### S5 (Simplified Structured State Space)
@@ -59,15 +59,15 @@ lru = Memoroid(cell=LRUCell(features=64, hidden_dim=64))
 ```python
 from memorax.networks import Memoroid, S5Cell
 
-s5 = Memoroid(cell=S5Cell(features=64, state_size=64))
+s5 = Memoroid(cell=S5Cell(config=S5Config(features=64, hidden_dim=64)))
 ```
 
 ### Mamba (Selective State Space Model)
 
 ```python
-from memorax.networks import Memoroid, MambaCell
+from memorax.networks import Memoroid, Mamba2Cell, Mamba2Config
 
-mamba = Memoroid(cell=MambaCell(features=64, num_heads=4, head_dim=16))
+mamba = Memoroid(cell=Mamba2Cell(config=Mamba2Config(features=64, num_heads=4, head_dim=16)))
 ```
 
 ### MinGRU
@@ -75,9 +75,9 @@ mamba = Memoroid(cell=MambaCell(features=64, num_heads=4, head_dim=16))
 Minimal GRU variant computed in log-space for numerical stability:
 
 ```python
-from memorax.networks import Memoroid, MinGRUCell
+from memorax.networks import Memoroid, MinGRUCell, MinGRUConfig
 
-mingru = Memoroid(cell=MinGRUCell(features=64))
+mingru = Memoroid(cell=MinGRUCell(config=MinGRUConfig(features=64)))
 ```
 
 ### mLSTM (Matrix LSTM)
@@ -85,25 +85,25 @@ mingru = Memoroid(cell=MinGRUCell(features=64))
 Matrix LSTM using gated linear attention:
 
 ```python
-from memorax.networks import Memoroid, mLSTMCell
+from memorax.networks import Memoroid, mLSTMCell, mLSTMConfig
 
-mlstm = Memoroid(cell=mLSTMCell(features=64, hidden_dim=64, num_heads=4))
+mlstm = Memoroid(cell=mLSTMCell(config=mLSTMConfig(features=64, hidden_dim=64, num_heads=4)))
 ```
 
 ### FFM (Fast and Forgetful Memory)
 
 ```python
-from memorax.networks import Memoroid, FFMCell
+from memorax.networks import Memoroid, FFMCell, FFMConfig
 
-ffm = Memoroid(cell=FFMCell(features=64, memory_size=32, context_size=64))
+ffm = Memoroid(cell=FFMCell(config=FFMConfig(features=64, memory_size=32, context_size=64)))
 ```
 
 ### RTU (Rotational Transformation Unit)
 
 ```python
-from memorax.networks import RNN, RTUCell
+from memorax.networks import RNN, RTUCell, RTUConfig
 
-rtu = RNN(cell=RTUCell(features=64, hidden_dim=64))
+rtu = RNN(cell=RTUCell(config=RTUConfig(features=64, hidden_dim=64)))
 ```
 
 ## Attention
@@ -113,9 +113,9 @@ rtu = RNN(cell=RTUCell(features=64, hidden_dim=64))
 Multi-head self-attention (used directly, no wrapper needed):
 
 ```python
-from memorax.networks import SelfAttention
+from memorax.networks import SelfAttention, SelfAttentionConfig
 
-attention = SelfAttention(features=64, num_heads=4, context_length=128)
+attention = SelfAttention(config=SelfAttentionConfig(features=64, num_heads=4, context_length=128))
 ```
 
 ### Linear Attention
@@ -123,9 +123,9 @@ attention = SelfAttention(features=64, num_heads=4, context_length=128)
 Efficient linear-complexity attention via kernelized features:
 
 ```python
-from memorax.networks import Memoroid, LinearAttentionCell
+from memorax.networks import Memoroid, LinearAttentionCell, LinearAttentionConfig
 
-linear_attention = Memoroid(cell=LinearAttentionCell(features=64, num_heads=4, head_dim=16))
+linear_attention = Memoroid(cell=LinearAttentionCell(config=LinearAttentionConfig(features=64, num_heads=4, head_dim=16)))
 ```
 
 ## RTRL (Real-Time Recurrent Learning)
@@ -173,18 +173,18 @@ rl2 = RL2Wrapper(model=RNN(cell=nn.GRUCell(features=64)))
 
 ```python
 from memorax.algorithms import PPO, PPOConfig
-from memorax.networks import Network, FeatureExtractor, Memoroid, MambaCell, heads
+from memorax.networks import Network, FeatureExtractor, Memoroid, Mamba2Cell, Mamba2Config, heads
 from memorax.networks.layers import Flatten
 
 actor = Network(
     feature_extractor=FeatureExtractor(observation_extractor=Flatten()),
-    torso=Memoroid(cell=MambaCell(features=64, num_heads=4, head_dim=16)),
+    torso=Memoroid(cell=Mamba2Cell(config=Mamba2Config(features=64, num_heads=4, head_dim=16))),
     head=heads.Categorical(action_dim=4),
 )
 
 critic = Network(
     feature_extractor=FeatureExtractor(observation_extractor=Flatten()),
-    torso=Memoroid(cell=MambaCell(features=64, num_heads=4, head_dim=16)),
+    torso=Memoroid(cell=Mamba2Cell(config=Mamba2Config(features=64, num_heads=4, head_dim=16))),
     head=heads.VNetwork(),
 )
 

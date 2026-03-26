@@ -4,6 +4,7 @@ from typing import Tuple
 import jax
 import jax.numpy as jnp
 from flax import linen as nn
+from flax import struct
 from flax.linen import initializers
 from flax.linen.linear import default_kernel_init
 from flax.typing import Dtype, Initializer
@@ -13,19 +14,8 @@ from memorax.utils.typing import Array, Carry
 from .memoroid import MemoroidCellBase
 
 
-class FFMCell(MemoroidCellBase):
-    """Fast and Forgetful Memory algebra.
-
-    Uses position-relative decay with complex exponential basis functions
-    for long-range dependencies.
-
-    Element: (S, t)
-    Combine: (S_i * γ(t_j - t_i) + S_j, t_j)
-
-    The decay γ(Δt) = exp((α + iω) * Δt) where α controls decay rate
-    and ω controls oscillation frequency.
-    """
-
+@struct.dataclass
+class FFMConfig:
     features: int
     memory_size: int
     context_size: int
@@ -33,59 +23,68 @@ class FFMCell(MemoroidCellBase):
     max_period: int = 1024
     epsilon: float = 0.01
     beta: float = 0.01
-    kernel_init: Initializer = default_kernel_init
-    bias_init: Initializer = initializers.zeros_init()
+    kernel_init: Initializer = struct.field(pytree_node=False, default=default_kernel_init)
+    bias_init: Initializer = struct.field(pytree_node=False, default=initializers.zeros_init())
     dtype: Dtype | None = None
     param_dtype: Dtype = jnp.float32
 
+
+@struct.dataclass
+class FFMCarry:
+    memory: Array
+    time: Array
+
+
+class FFMCell(MemoroidCellBase):
+    config: FFMConfig
+
     def setup(self):
         self.limit = (
-            jnp.log(jnp.finfo(self.param_dtype).max) / self.max_period - self.epsilon
+            jnp.log(jnp.finfo(self.config.param_dtype).max) / self.config.max_period - self.config.epsilon
         )
 
-        low = -self.limit + self.epsilon
+        low = -self.limit + self.config.epsilon
         high = jnp.maximum(
-            jnp.minimum(-1e-6, jnp.log(self.beta) / self.max_period), low
+            jnp.minimum(-1e-6, jnp.log(self.config.beta) / self.config.max_period), low
         )
         self.alpha = self.param(
             "alpha",
-            lambda _: jnp.linspace(low, high, self.memory_size, dtype=self.param_dtype),
+            lambda _: jnp.linspace(low, high, self.config.memory_size, dtype=self.config.param_dtype),
         )
         self.omega = self.param(
             "omega",
             lambda _: (2 * jnp.pi)
             / jnp.linspace(
-                self.min_period,
-                self.max_period,
-                self.context_size,
-                dtype=self.param_dtype,
+                self.config.min_period,
+                self.config.max_period,
+                self.config.context_size,
+                dtype=self.config.param_dtype,
             ),
         )
 
         dense = partial(
             nn.Dense,
             use_bias=True,
-            kernel_init=self.kernel_init,
-            bias_init=self.bias_init,
-            dtype=self.dtype,
-            param_dtype=self.param_dtype,
+            kernel_init=self.config.kernel_init,
+            bias_init=self.config.bias_init,
+            dtype=self.config.dtype,
+            param_dtype=self.config.param_dtype,
         )
 
-        self.pre = dense(features=self.memory_size, name="pre")
-        self.input_gate = dense(features=self.memory_size, name="input_gate")
-        self.output_gate = dense(features=self.features, name="output_gate")
-        self.skip = dense(features=self.features, name="skip")
-        self.mix = dense(features=self.features, name="mix")
+        self.pre = dense(features=self.config.memory_size, name="pre")
+        self.input_gate = dense(features=self.config.memory_size, name="input_gate")
+        self.output_gate = dense(features=self.config.features, name="output_gate")
+        self.skip = dense(features=self.config.features, name="skip")
+        self.mix = dense(features=self.config.features, name="mix")
         self.ln = nn.LayerNorm(use_scale=False, use_bias=False, name="ln")
 
     def _complex_dtype(self):
-        return jnp.complex64 if self.param_dtype == jnp.float32 else jnp.complex128
+        return jnp.complex64 if self.config.param_dtype == jnp.float32 else jnp.complex128
 
     def _gamma(self, dt):
-        """Compute decay factor γ(Δt) = exp((α + iω) * Δt)."""
         alpha = jnp.clip(self.alpha, min=-self.limit, max=-1e-8)
-        alpha = alpha.reshape(1, self.memory_size, 1)
-        omega = self.omega.reshape(1, 1, self.context_size)
+        alpha = alpha.reshape(1, self.config.memory_size, 1)
+        omega = self.omega.reshape(1, 1, self.config.context_size)
         return jnp.exp(jax.lax.complex(alpha, omega) * dt[..., None, None])
 
     def __call__(self, x: Array, **kwargs) -> Carry:
@@ -95,30 +94,25 @@ class FFMCell(MemoroidCellBase):
         gate = nn.sigmoid(self.input_gate(x))
         x_tilde = pre * gate
 
-        S = jnp.repeat(x_tilde[..., None], self.context_size, axis=-1)
-        S = jax.lax.complex(S, jnp.zeros_like(S))
+        memory = jnp.repeat(x_tilde[..., None], self.config.context_size, axis=-1)
+        memory = jax.lax.complex(memory, jnp.zeros_like(memory))
 
-        t = jnp.arange(T, dtype=self.param_dtype)
-        t = jnp.broadcast_to(t, (B, T))
-        t = jax.lax.complex(t, jnp.zeros_like(t))
+        time = jnp.arange(T, dtype=self.config.param_dtype)
+        time = jnp.broadcast_to(time, (B, T))
+        time = jax.lax.complex(time, jnp.zeros_like(time))
 
-        return (S, t)
+        return FFMCarry(memory=memory, time=time)
 
     def binary_operator(self, a: Carry, b: Carry) -> Carry:
-        """Position-relative combine: S_i * γ(t_j - t_i) + S_j"""
-        S_i, t_i = a
-        S_j, t_j = b
-        dt = t_j - t_i
+        dt = b.time - a.time
         gamma = self._gamma(dt)
-        return (S_i * gamma + S_j, t_j)
+        return FFMCarry(memory=a.memory * gamma + b.memory, time=b.time)
 
     def read(self, h: Carry, x: Array, **kwargs) -> Array:
-        S, _ = h
-
         output_gate = nn.sigmoid(self.output_gate(x))
         skip = self.skip(x)
 
-        z = jnp.concatenate([jnp.real(S), jnp.imag(S)], axis=-1)
+        z = jnp.concatenate([jnp.real(h.memory), jnp.imag(h.memory)], axis=-1)
         z = z.reshape((*z.shape[:-2], -1))
         z = self.mix(z)
 
@@ -127,10 +121,9 @@ class FFMCell(MemoroidCellBase):
 
     def initialize_carry(self, key: jax.Array, input_shape: Tuple[int, ...]) -> Carry:
         *batch_dims, _ = input_shape
-        S = jnp.zeros(
-            (*batch_dims, 1, self.memory_size, self.context_size),
+        memory = jnp.zeros(
+            (*batch_dims, 1, self.config.memory_size, self.config.context_size),
             dtype=self._complex_dtype(),
         )
-        t = jnp.full((*batch_dims, 1), -1, dtype=self._complex_dtype())
-        return (S, t)
-
+        time = jnp.full((*batch_dims, 1), -1, dtype=self._complex_dtype())
+        return FFMCarry(memory=memory, time=time)

@@ -59,21 +59,21 @@ Memorax also provides custom RNN cells like `sLSTMCell` and `SHMCell` that work 
 **Memoroid models** use JAX's associative scan for efficient O(T log T) parallel training. They cover state space models and linear recurrences. You wrap a cell in `Memoroid`:
 
 ```python
-from memorax.networks import Memoroid, MambaCell, S5Cell, LRUCell, mLSTMCell, MinGRUCell, FFMCell
+from memorax.networks import Memoroid, Mamba2Cell, Mamba2Config, S5Cell, S5Config, LRUCell, LRUConfig, mLSTMCell, mLSTMConfig, MinGRUCell, MinGRUConfig, FFMCell, FFMConfig
 
-torso = Memoroid(cell=MambaCell(features=64))
-torso = Memoroid(cell=S5Cell(features=64, state_size=64))
-torso = Memoroid(cell=LRUCell(features=64, hidden_dim=64))
-torso = Memoroid(cell=mLSTMCell(features=64, hidden_dim=64, num_heads=4))
+torso = Memoroid(cell=Mamba2Cell(config=Mamba2Config(features=64)))
+torso = Memoroid(cell=S5Cell(config=S5Config(features=64, hidden_dim=64)))
+torso = Memoroid(cell=LRUCell(config=LRUConfig(features=64, hidden_dim=64)))
+torso = Memoroid(cell=mLSTMCell(config=mLSTMConfig(features=64, hidden_dim=64, num_heads=4)))
 ```
 
 **Attention** models like `SelfAttention` can be used directly as a torso. For linear-complexity attention, wrap `LinearAttentionCell` in a `Memoroid`:
 
 ```python
-from memorax.networks import SelfAttention, LinearAttentionCell
+from memorax.networks import SelfAttention, SelfAttentionConfig, LinearAttentionCell, LinearAttentionConfig
 
-torso = SelfAttention(features=64, num_heads=4, context_length=128)
-torso = Memoroid(cell=LinearAttentionCell(features=64, num_heads=4, head_dim=16))
+torso = SelfAttention(config=SelfAttentionConfig(features=64, num_heads=4, context_length=128))
+torso = Memoroid(cell=LinearAttentionCell(config=LinearAttentionConfig(features=64, num_heads=4, head_dim=16)))
 ```
 
 If you want to use a non-recurrent module as a torso (for example a simple MLP), wrap it with `SequenceModelWrapper` so it conforms to the sequence model interface:
@@ -115,13 +115,13 @@ For deeper architectures you can compose layers using blocks for normalization, 
 ```python
 from memorax.networks import (
     FFN, ALiBi, GatedResidual, PreNorm,
-    SegmentRecurrence, SelfAttention, Stack,
+    SegmentRecurrence, SelfAttention, SelfAttentionConfig, Stack,
 )
 
 features, num_heads, num_layers = 64, 4, 2
 
 attention = GatedResidual(PreNorm(SegmentRecurrence(
-    SelfAttention(features, num_heads, context_length=128, positional_embedding=ALiBi(num_heads)),
+    SelfAttention(config=SelfAttentionConfig(features=features, num_heads=num_heads, context_length=128, positional_embedding=ALiBi(num_heads))),
     memory_length=64, features=features,
 )))
 ffn = GatedResidual(PreNorm(FFN(features=features, expansion_factor=4)))

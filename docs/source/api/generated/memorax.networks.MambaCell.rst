@@ -1,9 +1,9 @@
-﻿memorax.networks.MambaCell
+memorax.networks.Mamba2Cell
 ==========================
 
 .. currentmodule:: memorax.networks
 
-.. autoclass:: MambaCell
+.. autoclass:: Mamba2Cell
    :members:
    :show-inheritance:
    :inherited-members:

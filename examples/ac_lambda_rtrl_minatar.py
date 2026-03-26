@@ -10,7 +10,7 @@ from memorax.environments.wrappers import RecordEpisodeStatistics
 from memorax.loggers import DashboardLogger, MultiLogger
 from memorax.networks import RTRL, RNN, Flatten, FeatureExtractor, Network, Stack, heads
 from memorax.networks.blocks.ffn import Projection
-from memorax.networks.sequence_models import RTUCell
+from memorax.networks.sequence_models import RTUCell, RTUConfig
 
 total_timesteps = 10_000_000
 num_epochs = 100
@@ -52,7 +52,7 @@ actor_network = Network(
     feature_extractor=feature_extractor,
     torso=Stack(
         blocks=(
-            RTRL(sequence_model=RNN(cell=RTUCell(features=128, hidden_dim=128))),
+            RTRL(sequence_model=RNN(cell=RTUCell(config=RTUConfig(features=128, hidden_dim=128)))),
             Projection(features=128),
         )
     ),
@@ -63,7 +63,7 @@ critic_network = Network(
     feature_extractor=feature_extractor,
     torso=Stack(
         blocks=(
-            RTRL(sequence_model=RNN(cell=RTUCell(features=128, hidden_dim=128))),
+            RTRL(sequence_model=RNN(cell=RTUCell(config=RTUConfig(features=128, hidden_dim=128)))),
             Projection(features=128),
         )
     ),

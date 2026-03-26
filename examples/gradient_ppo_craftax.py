@@ -12,7 +12,8 @@ from memorax.environments.wrappers import RecordEpisodeStatistics
 from memorax.loggers import DashboardLogger, MultiLogger
 from memorax.networks import (
     FeatureExtractor,
-    MambaCell,
+    Mamba2Cell,
+    Mamba2Config,
     Memoroid,
     Network,
     Stack,
@@ -69,7 +70,7 @@ actor_network = Network(
     feature_extractor=feature_extractor,
     torso=Stack(
         blocks=(
-            Memoroid(cell=MambaCell(features=512)),
+            Memoroid(cell=Mamba2Cell(config=Mamba2Config(features=512))),
             Projection(features=512),
         )
     ),
@@ -80,7 +81,7 @@ critic_network = Network(
     feature_extractor=feature_extractor,
     torso=Stack(
         blocks=(
-            Memoroid(cell=MambaCell(features=512)),
+            Memoroid(cell=Mamba2Cell(config=Mamba2Config(features=512))),
             Projection(features=512),
         )
     ),
@@ -91,7 +92,7 @@ h_network = Network(
     feature_extractor=feature_extractor,
     torso=Stack(
         blocks=(
-            Memoroid(cell=MambaCell(features=512)),
+            Memoroid(cell=Mamba2Cell(config=Mamba2Config(features=512))),
             Projection(features=512),
         )
     ),
