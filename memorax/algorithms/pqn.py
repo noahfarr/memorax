@@ -178,10 +178,10 @@ class PQN:
         return (lambda_return, q_value), lambda_return
 
     def _update_epoch(self, carry: tuple, key: Key):
-        state, initial_carry, transitions, lambda_targets = carry
+        state, initial_carry, transitions = carry
 
         permutation_key, minibatch_key = jax.random.split(key)
-        batch = (initial_carry, transitions, lambda_targets)
+        batch = (initial_carry, transitions)
 
         def shuffle(batch: PyTree):
             shuffle_time_axis = initial_carry is None
@@ -189,9 +189,9 @@ class PQN:
             if shuffle_time_axis:
                 batch = (
                     initial_carry,
-                    *jax.tree.map(
+                    jax.tree.map(
                         lambda x: x.reshape(-1, 1, *x.shape[2:]),
-                        (transitions, lambda_targets),
+                        transitions,
                     ),
                 )
                 num_permutations *= self.cfg.num_steps
@@ -212,12 +212,12 @@ class PQN:
         state, metrics = jax.lax.scan(
             self._update_minibatch, state, (minibatches, minibatch_keys)
         )
-        return (state, initial_carry, transitions, lambda_targets), metrics
+        return (state, initial_carry, transitions), metrics
 
     def _update_minibatch(self, state: PQNState, xs: tuple):
         minibatch, key = xs
 
-        carry, transitions, target = minibatch
+        carry, transitions = minibatch
 
         torso_key, dropout_key = jax.random.split(key)
 
@@ -237,7 +237,8 @@ class PQN:
             transitions = jax.tree.map(
                 lambda x: x[:, self.cfg.burn_in_length :], transitions
             )
-            target = target[:, self.cfg.burn_in_length :]
+
+        target = transitions.aux["targets"]
 
         def loss_fn(params: PyTree):
             _, (q_values, aux) = self.q_network.apply(
@@ -307,13 +308,13 @@ class PQN:
             transitions,
             reverse=True,
         )
+        transitions = transitions.replace(aux={**transitions.aux, "targets": targets})
         transitions = jax.tree.map(lambda x: jnp.swapaxes(x, 0, 1), transitions)
-        targets = jnp.swapaxes(targets, 0, 1)
 
         epoch_keys = jax.random.split(epoch_key, self.cfg.update_epochs)
-        (state, _, transitions, _), metrics = jax.lax.scan(
+        (state, _, transitions), metrics = jax.lax.scan(
             self._update_epoch,
-            (state, initial_carry, transitions, targets),
+            (state, initial_carry, transitions),
             epoch_keys,
         )
 

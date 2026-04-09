@@ -27,7 +27,6 @@ class GradientPPOConfig:
     entropy_coefficient: float
     regularization_coefficient: float
     truncation_length: int
-    target_kl: float | None = None
     burn_in_length: int = 0
 
     @property
@@ -206,7 +205,7 @@ class GradientPPO:
         return state, transition
 
     def _update_actor(
-        self, key: Key, state: GradientPPOState, initial_actor_carry: Carry, transitions: Transition, advantages: Array
+        self, key: Key, state: GradientPPOState, initial_actor_carry: Carry, transitions: Transition
     ) -> tuple[GradientPPOState, Array, tuple[Array, Array, Array]]:
         torso_key, dropout_key = jax.random.split(key)
 
@@ -226,7 +225,8 @@ class GradientPPO:
             transitions = jax.tree.map(
                 lambda x: x[:, self.cfg.burn_in_length :], transitions
             )
-            advantages = advantages[:, self.cfg.burn_in_length :]
+
+        advantages = transitions.aux["advantages"].squeeze(-1)
 
         def actor_loss_fn(params: PyTree):
             _, (probs, _) = self.actor_network.apply(
@@ -383,8 +383,6 @@ class GradientPPO:
             initial_critic_carry,
             initial_h_carry,
             transitions,
-            advantages,
-            returns,
         ) = minibatch
 
         critic_key, h_key, actor_key = jax.random.split(key, 3)
@@ -414,27 +412,22 @@ class GradientPPO:
                 (delta_lambda - delta_lambda.mean())
                 / (delta_lambda.std() + 1e-8)
             )
+        transitions = transitions.replace(aux={**transitions.aux, "advantages": delta_lambda})
         state, actor_loss, aux = self._update_actor(
-            actor_key, state, initial_actor_carry, transitions, delta_lambda
+            actor_key, state, initial_actor_carry, transitions
         )
 
         return state, (actor_loss, critic_loss, aux)
 
-    def _update_epoch(self, carry: tuple) -> tuple:
+    def _update_epoch(self, carry: tuple, key: Key) -> tuple:
         (
             state,
             initial_actor_carry,
             initial_critic_carry,
             initial_h_carry,
             transitions,
-            advantages,
-            returns,
-            *_,
-            base_key,
-            epoch,
         ) = carry
 
-        key = jax.random.fold_in(base_key, epoch)
         permutation_key, minibatch_key = jax.random.split(key)
 
         def shuffle(batch: PyTree):
@@ -447,9 +440,9 @@ class GradientPPO:
                     initial_actor_carry,
                     initial_critic_carry,
                     initial_h_carry,
-                    *jax.tree.map(
+                    jax.tree.map(
                         lambda x: x.reshape(-1, *x.shape[2:]),
-                        (transitions, advantages, returns),
+                        transitions,
                     ),
                 )
                 num_permutations *= self.cfg.num_steps // self.cfg.truncation_length
@@ -470,8 +463,6 @@ class GradientPPO:
                 initial_critic_carry,
                 initial_h_carry,
                 transitions,
-                advantages,
-                returns,
             )
         )
         minibatch_keys = jax.random.split(minibatch_key, self.cfg.num_minibatches)
@@ -494,12 +485,7 @@ class GradientPPO:
             initial_critic_carry,
             initial_h_carry,
             transitions,
-            advantages,
-            returns,
-            metrics,
-            base_key,
-            epoch + 1,
-        )
+        ), metrics
 
     def _update_step(self, state: GradientPPOState, key: Key) -> tuple[GradientPPOState, None]:
         step_key, epoch_key = jax.random.split(key)
@@ -513,41 +499,28 @@ class GradientPPO:
 
         transitions = jax.tree.map(lambda x: jnp.swapaxes(x, 0, 1), transitions)
 
-        advantages = jnp.zeros((self.cfg.num_envs, self.cfg.num_steps))
-        returns = jnp.zeros((self.cfg.num_envs, self.cfg.num_steps))
-
-        transitions, advantages, returns = jax.tree.map(
+        transitions = jax.tree.map(
             lambda x: x.reshape(
                 self.cfg.num_envs, -1, self.cfg.truncation_length, *x.shape[2:]
             ),
-            (transitions, advantages, returns),
+            transitions,
         )
 
         initial_actor_carry, initial_critic_carry, initial_h_carry = jax.tree.map(
             lambda x: x[:, :, 0], transitions.carry
         )
 
-        transitions, advantages, returns = jax.tree.map(
+        transitions = jax.tree.map(
             lambda x: x.reshape(-1, *x.shape[2:]),
-            (transitions, advantages, returns),
+            transitions,
         )
         initial_actor_carry, initial_critic_carry, initial_h_carry = jax.tree.map(
             lambda x: x.reshape(-1, *x.shape[2:]),
             (initial_actor_carry, initial_critic_carry, initial_h_carry),
         )
 
-        def cond_fun(carry):
-            *_, (*_, approximate_kl, _), _base_key, epoch = carry
-
-            cond = epoch < self.cfg.update_epochs
-
-            if self.cfg.target_kl:
-                cond = cond & (approximate_kl < self.cfg.target_kl)
-
-            return cond
-
-        state, *_, metrics, _base_key, _ = jax.lax.while_loop(
-            cond_fun,
+        epoch_keys = jax.random.split(epoch_key, self.cfg.update_epochs)
+        (state, *_, transitions), metrics = jax.lax.scan(
             self._update_epoch,
             (
                 state,
@@ -555,15 +528,13 @@ class GradientPPO:
                 initial_critic_carry,
                 initial_h_carry,
                 transitions,
-                advantages,
-                returns,
-                (0.0, 0.0, 0.0, 0.0, 0.0),
-                epoch_key,
-                0,
             ),
+            epoch_keys,
         )
 
-        actor_loss, critic_loss, entropy, approximate_kl, clip_fraction = metrics
+        actor_loss, critic_loss, entropy, approximate_kl, clip_fraction = jax.tree.map(
+            lambda x: x.mean(), metrics
+        )
         lox.log({
             "losses/actor/loss": actor_loss,
             "losses/critic/loss": critic_loss,

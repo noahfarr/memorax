@@ -34,7 +34,6 @@ class PPOConfig:
     clip_coefficient: float
     clip_value_loss: bool
     entropy_coefficient: float
-    target_kl: float | None = None
     burn_in_length: int = 0
 
     @property
@@ -216,7 +215,7 @@ class PPO:
         return state, transition
 
     def _update_actor(
-        self, key: Key, state: PPOState, initial_actor_carry: Carry, transitions: Transition, advantages: Array
+        self, key: Key, state: PPOState, initial_actor_carry: Carry, transitions: Transition
     ) -> tuple[PPOState, Array, tuple[Array, Array, Array]]:
         torso_key, dropout_key = jax.random.split(key)
 
@@ -236,7 +235,8 @@ class PPO:
             transitions = jax.tree.map(
                 lambda x: x[:, self.cfg.burn_in_length :], transitions
             )
-            advantages = advantages[:, self.cfg.burn_in_length :]
+
+        advantages = transitions.aux["advantages"].squeeze(-1)
 
         def actor_loss_fn(params: PyTree):
             _, (probs, _) = self.actor_network.apply(
@@ -287,7 +287,7 @@ class PPO:
         return state, actor_loss.mean(), aux
 
     def _update_critic(
-        self, key: Key, state: PPOState, initial_critic_carry: Carry, transitions: Transition, returns: Array
+        self, key: Key, state: PPOState, initial_critic_carry: Carry, transitions: Transition
     ) -> tuple[PPOState, Array]:
         torso_key, dropout_key = jax.random.split(key)
 
@@ -307,7 +307,8 @@ class PPO:
             transitions = jax.tree.map(
                 lambda x: x[:, self.cfg.burn_in_length :], transitions
             )
-            returns = returns[:, self.cfg.burn_in_length :]
+
+        returns = transitions.aux["returns"]
 
         def critic_loss_fn(params: PyTree):
             _, (values, aux) = self.critic_network.apply(
@@ -361,43 +362,33 @@ class PPO:
             initial_actor_carry,
             initial_critic_carry,
             transitions,
-            advantages,
-            returns,
         ) = minibatch
 
         actor_key, critic_key = jax.random.split(key)
 
         state, critic_loss = self._update_critic(
-            critic_key, state, initial_critic_carry, transitions, returns
+            critic_key, state, initial_critic_carry, transitions
         )
         state, actor_loss, aux = self._update_actor(
-            actor_key, state, initial_actor_carry, transitions, advantages
+            actor_key, state, initial_actor_carry, transitions
         )
 
         return state, (actor_loss, critic_loss, aux)
 
-    def _update_epoch(self, carry: tuple) -> tuple:
+    def _update_epoch(self, carry: tuple, key: Key) -> tuple:
         (
             state,
             initial_actor_carry,
             initial_critic_carry,
             transitions,
-            advantages,
-            returns,
-            *_,
-            base_key,
-            epoch,
         ) = carry
 
-        key = jax.random.fold_in(base_key, epoch)
         permutation_key, minibatch_key = jax.random.split(key)
 
         batch = (
             initial_actor_carry,
             initial_critic_carry,
             transitions,
-            advantages,
-            returns,
         )
 
         def shuffle(batch: PyTree):
@@ -409,9 +400,9 @@ class PPO:
                 batch = (
                     initial_actor_carry,
                     initial_critic_carry,
-                    *jax.tree.map(
+                    jax.tree.map(
                         lambda x: x.reshape(-1, 1, *x.shape[2:]),
-                        (transitions, advantages, returns),
+                        transitions,
                     ),
                 )
                 num_permutations *= self.cfg.num_steps
@@ -449,12 +440,7 @@ class PPO:
             initial_actor_carry,
             initial_critic_carry,
             transitions,
-            advantages,
-            returns,
-            metrics,
-            base_key,
-            epoch + 1,
-        )
+        ), metrics
 
     def _update_step(self, state: PPOState, key: Key) -> tuple[PPOState, None]:
         step_key, epoch_key = jax.random.split(key)
@@ -490,41 +476,29 @@ class PPO:
         )
         returns = advantages + transitions.aux["value"]
 
-        transitions = jax.tree.map(lambda x: jnp.swapaxes(x, 0, 1), transitions)
-
-        advantages = jnp.swapaxes(advantages, 0, 1)
-        returns = jnp.swapaxes(returns, 0, 1)
-
         if self.cfg.normalize_advantage:
             advantages = (advantages - advantages.mean()) / (advantages.std() + 1e-8)
 
-        def cond_fun(carry):
-            *_, (*_, approximate_kl, _), _base_key, epoch = carry
+        transitions = transitions.replace(
+            aux={**transitions.aux, "advantages": advantages, "returns": returns}
+        )
+        transitions = jax.tree.map(lambda x: jnp.swapaxes(x, 0, 1), transitions)
 
-            cond = epoch < self.cfg.update_epochs
-
-            if self.cfg.target_kl:
-                cond = cond & (approximate_kl < self.cfg.target_kl)
-
-            return cond
-
-        state, *_, metrics, _base_key, _ = jax.lax.while_loop(
-            cond_fun,
+        epoch_keys = jax.random.split(epoch_key, self.cfg.update_epochs)
+        (state, *_, transitions), metrics = jax.lax.scan(
             self._update_epoch,
             (
                 state,
                 initial_actor_carry,
                 initial_critic_carry,
                 transitions,
-                advantages,
-                returns,
-                (0.0, 0.0, 0.0, 0.0, 0.0),
-                epoch_key,
-                0,
             ),
+            epoch_keys,
         )
 
-        actor_loss, critic_loss, entropy, approximate_kl, clip_fraction = metrics
+        actor_loss, critic_loss, entropy, approximate_kl, clip_fraction = jax.tree.map(
+            lambda x: x.mean(), metrics
+        )
         lox.log(
             {
                 "losses/actor/loss": actor_loss,
