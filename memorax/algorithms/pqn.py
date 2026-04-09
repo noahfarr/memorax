@@ -264,7 +264,7 @@ class PQN:
             )
 
         (loss, aux), grads = jax.value_and_grad(loss_fn, has_aux=True)(state.params)
-        lox.log({"training/gradient_norm": optax.global_norm(grads)})
+        lox.log({"training/q_network/gradient_norm": optax.global_norm(grads)})
         updates, optimizer_state = self.optimizer.update(
             grads, state.optimizer_state, state.params
         )
@@ -321,9 +321,9 @@ class PQN:
         loss, q_value, td_error = metrics
         lox.log(
             {
-                "losses/loss": loss,
-                "training/q_value": q_value,
-                "losses/td_error": td_error,
+                "losses/q_network/loss": loss,
+                "losses/q_network/td_error": td_error,
+                "training/q_network/q_value": q_value,
                 "training/epsilon": self.epsilon_schedule(state.step),
                 "training/step": state.step,
                 "training/update_step": state.update_step,
