@@ -9,7 +9,6 @@ import lox
 from flax import core, struct
 
 from memorax.utils.axes import (
-    add_feature_axis,
     add_time_axis,
     remove_feature_axis,
     remove_time_axis,
@@ -54,13 +53,13 @@ class ACLambda:
     def _deterministic_action(
         self, key: Key, state: ACLambdaState
     ) -> tuple[ACLambdaState, Array, Array, None, dict]:
-        timestep = state.timestep.to_sequence()
+        obs, done, action, reward = state.timestep.to_sequence()
         (actor_carry, (probs, _)), intermediates = self.actor_network.apply(
             state.actor_params,
-            observation=timestep.obs,
-            action=timestep.action,
-            reward=add_feature_axis(timestep.reward),
-            done=timestep.done,
+            observation=obs,
+            action=action,
+            reward=reward,
+            done=done,
             initial_carry=state.actor_carry,
             mutable=["intermediates"],
         )
@@ -79,14 +78,14 @@ class ACLambda:
         self, key: Key, state: ACLambdaState
     ) -> tuple[ACLambdaState, Array, Array, Array, dict]:
         action_key, actor_torso_key, critic_torso_key = jax.random.split(key, 3)
-        timestep = state.timestep.to_sequence()
+        obs, done, ts_action, reward = state.timestep.to_sequence()
 
         (actor_carry, (probs, _)), intermediates = self.actor_network.apply(
             state.actor_params,
-            observation=timestep.obs,
-            action=timestep.action,
-            reward=add_feature_axis(timestep.reward),
-            done=timestep.done,
+            observation=obs,
+            action=ts_action,
+            reward=reward,
+            done=done,
             initial_carry=state.actor_carry,
             rngs={"torso": actor_torso_key},
             mutable=["intermediates"],
@@ -95,10 +94,10 @@ class ACLambda:
 
         critic_carry, (value, _) = self.critic_network.apply(
             state.critic_params,
-            observation=timestep.obs,
-            action=timestep.action,
-            reward=add_feature_axis(timestep.reward),
-            done=timestep.done,
+            observation=obs,
+            action=ts_action,
+            reward=reward,
+            done=done,
             initial_carry=state.critic_carry,
             rngs={"torso": critic_torso_key},
         )
@@ -178,14 +177,14 @@ class ACLambda:
     def _update_step(self, state: ACLambdaState, key: Key) -> tuple[ACLambdaState, None]:
         action_key, step_key, actor_torso_key, critic_torso_key = jax.random.split(key, 4)
 
-        timestep = state.timestep.to_sequence()
+        obs, done, ts_action, reward = state.timestep.to_sequence()
 
         (actor_carry, (probs, _)), intermediates = self.actor_network.apply(
             state.actor_params,
-            observation=timestep.obs,
-            action=timestep.action,
-            reward=add_feature_axis(timestep.reward),
-            done=timestep.done,
+            observation=obs,
+            action=ts_action,
+            reward=reward,
+            done=done,
             initial_carry=state.actor_carry,
             rngs={"torso": actor_torso_key},
             mutable=["intermediates"],
@@ -197,10 +196,10 @@ class ACLambda:
 
         critic_carry, (value, _) = self.critic_network.apply(
             state.critic_params,
-            observation=timestep.obs,
-            action=timestep.action,
-            reward=add_feature_axis(timestep.reward),
-            done=timestep.done,
+            observation=obs,
+            action=ts_action,
+            reward=reward,
+            done=done,
             initial_carry=state.critic_carry,
             rngs={"torso": critic_torso_key},
         )
@@ -209,26 +208,26 @@ class ACLambda:
 
         num_envs, *_ = state.timestep.obs.shape
         step_key = jax.random.split(step_key, num_envs)
-        next_obs, env_state, reward, done, info = jax.vmap(
+        next_obs, env_state, next_reward, next_done, info = jax.vmap(
             self.env.step, in_axes=(0, 0, 0, None)
         )(step_key, state.env_state, action, self.env_params)
 
-        next_timestep = Timestep(
-            obs=next_obs, action=action, reward=reward, done=done
+        next_obs_s, next_done_s, next_action_s, next_reward_s = Timestep(
+            obs=next_obs, action=action, reward=next_reward, done=next_done
         ).to_sequence()
         _, (next_value, _) = self.critic_network.apply(
             jax.lax.stop_gradient(state.critic_params),
-            observation=next_timestep.obs,
-            action=next_timestep.action,
-            reward=add_feature_axis(next_timestep.reward),
-            done=next_timestep.done,
+            observation=next_obs_s,
+            action=next_action_s,
+            reward=next_reward_s,
+            done=next_done_s,
             initial_carry=jax.lax.stop_gradient(critic_carry),
         )
         next_value = remove_time_axis(next_value)
         next_value = remove_feature_axis(next_value)
 
         gamma = self.critic_network.head.gamma
-        td_error = reward + gamma * (1 - done) * next_value - value
+        td_error = next_reward + gamma * (1 - next_done) * next_value - value
 
         initial_actor_carry = jax.lax.stop_gradient(state.actor_carry)
         initial_critic_carry = jax.lax.stop_gradient(state.critic_carry)
@@ -236,10 +235,10 @@ class ACLambda:
         def critic_loss_fn(params: PyTree):
             _, (v, _) = self.critic_network.apply(
                 params,
-                observation=timestep.obs,
-                action=timestep.action,
-                reward=add_feature_axis(timestep.reward),
-                done=timestep.done,
+                observation=obs,
+                action=ts_action,
+                reward=reward,
+                done=done,
                 initial_carry=initial_critic_carry,
             )
             return remove_feature_axis(remove_time_axis(v))
@@ -247,10 +246,10 @@ class ACLambda:
         def actor_loss_fn(params: PyTree):
             _, (dist, _) = self.actor_network.apply(
                 params,
-                observation=timestep.obs,
-                action=timestep.action,
-                reward=add_feature_axis(timestep.reward),
-                done=timestep.done,
+                observation=obs,
+                action=ts_action,
+                reward=reward,
+                done=done,
                 initial_carry=initial_actor_carry,
             )
             log_p = remove_time_axis(dist.log_prob(add_time_axis(action)))
@@ -299,7 +298,7 @@ class ACLambda:
             "intermediates": intermediates,
             "losses/td_error": td_error.mean(),
             "losses/actor/entropy": entropy,
-            "training/value": value.mean(),
+            "critic/value": value.mean(),
             "training/step": state.step,
             "training/update_step": state.update_step,
         })
@@ -349,16 +348,17 @@ class ACLambda:
         actor_carry = self.actor_network.initialize_carry((self.cfg.num_envs, None))
         critic_carry = self.critic_network.initialize_carry((self.cfg.num_envs, None))
 
+        ts_obs, ts_done, ts_action, ts_reward = timestep
         actor_params = self.actor_network.init(
             {
                 "params": actor_key,
                 "torso": actor_torso_key,
                 "dropout": actor_dropout_key,
             },
-            observation=timestep.obs,
-            action=timestep.action,
-            reward=add_feature_axis(timestep.reward),
-            done=timestep.done,
+            observation=ts_obs,
+            action=ts_action,
+            reward=ts_reward,
+            done=ts_done,
             initial_carry=actor_carry,
         )
         critic_params = self.critic_network.init(
@@ -367,10 +367,10 @@ class ACLambda:
                 "torso": critic_torso_key,
                 "dropout": critic_dropout_key,
             },
-            observation=timestep.obs,
-            action=timestep.action,
-            reward=add_feature_axis(timestep.reward),
-            done=timestep.done,
+            observation=ts_obs,
+            action=ts_action,
+            reward=ts_reward,
+            done=ts_done,
             initial_carry=critic_carry,
         )
 

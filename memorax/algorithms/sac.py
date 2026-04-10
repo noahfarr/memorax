@@ -10,7 +10,7 @@ import optax
 from flax import core, struct
 
 from memorax.utils import Timestep, Transition, periodic_incremental_update
-from memorax.utils.axes import add_feature_axis, remove_time_axis
+from memorax.utils.axes import remove_time_axis
 from memorax.utils.typing import (
     Array,
     Buffer,
@@ -79,13 +79,13 @@ class SAC:
 
     def _deterministic_action(self, key: Key, state: SACState):
         sample_key = key
-        timestep = state.timestep.to_sequence()
+        obs, done, action, reward = state.timestep.to_sequence()
         (next_carry, (dist, _)), intermediates = self.actor_network.apply(
             state.actor_params,
-            observation=timestep.obs,
-            done=timestep.done,
-            action=timestep.action,
-            reward=add_feature_axis(timestep.reward),
+            observation=obs,
+            done=done,
+            action=action,
+            reward=reward,
             initial_carry=state.actor_carry,
             temperature=0.0,
             mutable=["intermediates"],
@@ -97,13 +97,13 @@ class SAC:
 
     def _stochastic_action(self, key: Key, state: SACState):
         sample_key = key
-        timestep = state.timestep.to_sequence()
+        obs, done, action, reward = state.timestep.to_sequence()
         (next_carry, (dist, _)), intermediates = self.actor_network.apply(
             state.actor_params,
-            observation=timestep.obs,
-            done=timestep.done,
-            action=timestep.action,
-            reward=add_feature_axis(timestep.reward),
+            observation=obs,
+            done=done,
+            action=action,
+            reward=reward,
             initial_carry=state.actor_carry,
             mutable=["intermediates"],
         )
@@ -209,12 +209,13 @@ class SAC:
         ).to_sequence()
 
         actor_carry = self.actor_network.initialize_carry((self.cfg.num_envs, None))
+        ts_obs, ts_done, ts_action, ts_reward = timestep
         actor_params = self.actor_network.init(
             {"params": actor_key, "torso": actor_torso_key},
-            observation=timestep.obs,
-            done=timestep.done,
-            action=timestep.action,
-            reward=add_feature_axis(timestep.reward),
+            observation=ts_obs,
+            done=ts_done,
+            action=ts_action,
+            reward=ts_reward,
             initial_carry=actor_carry,
         )
         actor_optimizer_state = self.actor_optimizer.init(actor_params)
@@ -222,10 +223,10 @@ class SAC:
         critic_carry = self.critic_network.initialize_carry((self.cfg.num_envs, None))
         critic_params = self.critic_network.init(
             {"params": critic_key, "torso": critic_torso_key},
-            observation=timestep.obs,
-            done=timestep.done,
-            action=timestep.action,
-            reward=add_feature_axis(timestep.reward),
+            observation=ts_obs,
+            done=ts_done,
+            action=ts_action,
+            reward=ts_reward,
             initial_carry=critic_carry,
         )
         critic_target_params = critic_params
@@ -269,12 +270,13 @@ class SAC:
         action_dim, *_ = self.env.action_space(self.env_params).shape
         target_entropy = -self.cfg.target_entropy_scale * action_dim
 
+        first_obs, first_done, first_action, first_reward = experience.first
         _, (dist, _) = self.actor_network.apply(
             state.actor_params,
-            observation=experience.first.obs,
-            done=experience.first.done,
-            action=experience.first.action,
-            reward=add_feature_axis(experience.first.reward),
+            observation=first_obs,
+            done=first_done,
+            action=first_action,
+            reward=first_reward,
             initial_carry=initial_actor_carry,
         )
 
@@ -293,7 +295,7 @@ class SAC:
         lox.log({
             "losses/alpha/loss": alpha_loss,
             "losses/alpha/value": alpha,
-            "training/alpha/gradient_norm": optax.global_norm(grads),
+            "alpha/gradient_norm": optax.global_norm(grads),
         })
         updates, optimizer_state = self.alpha_optimizer.update(
             grads, state.alpha_optimizer_state, state.alpha_params
@@ -317,22 +319,24 @@ class SAC:
         log_alpha = self.alpha_network.apply(state.alpha_params)
         alpha = jnp.exp(log_alpha)
 
+        first_obs, first_done, first_action, first_reward = experience.first
+
         def actor_loss_fn(actor_params):
             carry, (dist, _) = self.actor_network.apply(
                 actor_params,
-                observation=experience.first.obs,
-                done=experience.first.done,
-                action=experience.first.action,
-                reward=add_feature_axis(experience.first.reward),
+                observation=first_obs,
+                done=first_done,
+                action=first_action,
+                reward=first_reward,
                 initial_carry=initial_actor_carry,
             )
             actions, log_probs = dist.sample_and_log_prob(seed=key)
             _, (qs, _) = self.critic_network.apply(
                 state.critic_params,
-                observation=experience.first.obs,
-                done=experience.first.done,
+                observation=first_obs,
+                done=first_done,
                 action=actions,
-                reward=add_feature_axis(experience.first.reward),
+                reward=first_reward,
                 initial_carry=initial_critic_carry,
             )
             q = jnp.minimum(*qs)
@@ -345,7 +349,7 @@ class SAC:
         lox.log({
             "losses/actor/loss": actor_loss,
             "losses/actor/entropy": -log_probs.mean(),
-            "training/actor/gradient_norm": optax.global_norm(grads),
+            "actor/gradient_norm": optax.global_norm(grads),
         })
         updates, actor_optimizer_state = self.actor_optimizer.update(
             grads, state.actor_optimizer_state, state.actor_params
@@ -367,22 +371,23 @@ class SAC:
         initial_critic_carry: Carry = None,
         initial_target_critic_carry: Carry = None,
     ):
+        second_obs, second_done, second_action, second_reward = experience.second
         _, (dist, _) = self.actor_network.apply(
             state.actor_params,
-            observation=experience.second.obs,
-            done=experience.second.done,
-            action=experience.second.action,
-            reward=add_feature_axis(experience.second.reward),
+            observation=second_obs,
+            done=second_done,
+            action=second_action,
+            reward=second_reward,
             initial_carry=initial_actor_carry,
         )
         next_actions, next_log_probs = dist.sample_and_log_prob(seed=key)
 
         _, (next_qs, _) = self.critic_network.apply(
             state.critic_target_params,
-            observation=experience.second.obs,
-            done=experience.second.done,
+            observation=second_obs,
+            done=second_done,
             action=next_actions,
-            reward=add_feature_axis(experience.second.reward),
+            reward=second_reward,
             initial_carry=initial_target_critic_carry,
         )
         next_q = jnp.minimum(*next_qs)
@@ -390,17 +395,22 @@ class SAC:
         log_alpha = self.alpha_network.apply(state.alpha_params)
         alpha = jnp.exp(log_alpha)
         next_value = next_q - alpha * next_log_probs
-        target_q = self.critic_network.head.get_target(experience, next_value)
+        target_q = (
+            experience.second.reward
+            + self.critic_network.head.gamma * (1 - experience.second.done) * next_value
+        )
 
         target_q = jax.lax.stop_gradient(target_q)
+
+        first_obs, first_done, first_action, first_reward = experience.first
 
         def critic_loss_fn(critic_params):
             _, (qs, _) = self.critic_network.apply(
                 critic_params,
-                observation=experience.first.obs,
-                done=experience.first.done,
-                action=experience.second.action,
-                reward=add_feature_axis(experience.first.reward),
+                observation=first_obs,
+                done=first_done,
+                action=second_action,
+                reward=first_reward,
                 initial_carry=initial_critic_carry,
             )
             q1, q2 = qs
@@ -422,7 +432,7 @@ class SAC:
             "losses/critic/loss": critic_loss,
             "losses/critic/q1": q1.mean(),
             "losses/critic/q2": q2.mean(),
-            "training/critic/gradient_norm": optax.global_norm(grads),
+            "critic/gradient_norm": optax.global_norm(grads),
         })
         updates, critic_optimizer_state = self.critic_optimizer.update(
             grads, state.critic_optimizer_state, state.critic_params
@@ -460,32 +470,34 @@ class SAC:
             burn_in = jax.tree.map(
                 lambda x: x[:, : self.cfg.burn_in_length], experience
             )
+            bi_obs, bi_done, bi_action, bi_reward = burn_in.first
             initial_actor_carry, (_, _) = self.actor_network.apply(
                 jax.lax.stop_gradient(state.actor_params),
-                observation=burn_in.first.obs,
-                done=burn_in.first.done,
-                action=burn_in.first.action,
-                reward=add_feature_axis(burn_in.first.reward),
+                observation=bi_obs,
+                done=bi_done,
+                action=bi_action,
+                reward=bi_reward,
                 initial_carry=initial_actor_carry,
             )
             initial_actor_carry = jax.lax.stop_gradient(initial_actor_carry)
 
             initial_critic_carry, _ = self.critic_network.apply(
                 jax.lax.stop_gradient(state.critic_params),
-                observation=burn_in.first.obs,
-                done=burn_in.first.done,
-                action=burn_in.first.action,
-                reward=add_feature_axis(burn_in.first.reward),
+                observation=bi_obs,
+                done=bi_done,
+                action=bi_action,
+                reward=bi_reward,
                 initial_carry=initial_critic_carry,
             )
             initial_critic_carry = jax.lax.stop_gradient(initial_critic_carry)
 
+            bi2_obs, bi2_done, bi2_action, bi2_reward = burn_in.second
             initial_target_critic_carry, _ = self.critic_network.apply(
                 jax.lax.stop_gradient(state.critic_target_params),
-                observation=burn_in.second.obs,
-                done=burn_in.second.done,
-                action=burn_in.second.action,
-                reward=add_feature_axis(burn_in.second.reward),
+                observation=bi2_obs,
+                done=bi2_done,
+                action=bi2_action,
+                reward=bi2_reward,
                 initial_carry=initial_target_critic_carry,
             )
             initial_target_critic_carry = jax.lax.stop_gradient(

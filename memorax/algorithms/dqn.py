@@ -59,27 +59,21 @@ class DQN:
     q_network: nn.Module
     optimizer: optax.GradientTransformation
     buffer: Buffer
-
-    def __post_init__(self):
-        assert self.cfg.train_frequency >= self.cfg.num_envs, (
-            f"train_frequency ({self.cfg.train_frequency}) must be >= num_envs ({self.cfg.num_envs})"
-        )
-        assert self.cfg.train_frequency % self.cfg.num_envs == 0, (
-            f"train_frequency ({self.cfg.train_frequency}) must be divisible by num_envs ({self.cfg.num_envs})"
-        )
     epsilon_schedule: optax.Schedule
 
-    def _greedy_action(
-        self, key: Key, state: DQNState
-    ) -> tuple[DQNState, Array, dict]:
+    def __post_init__(self):
+        assert (
+            self.cfg.train_frequency >= self.cfg.num_envs
+        ), f"train_frequency ({self.cfg.train_frequency}) must be >= num_envs ({self.cfg.num_envs})"
+        assert (
+            self.cfg.train_frequency % self.cfg.num_envs == 0
+        ), f"train_frequency ({self.cfg.train_frequency}) must be divisible by num_envs ({self.cfg.num_envs})"
+
+    def _greedy_action(self, key: Key, state: DQNState) -> tuple[DQNState, Array, dict]:
         torso_key = key
-        timestep = state.timestep.to_sequence()
         (carry, (q_values, _)), intermediates = self.q_network.apply(
             state.params,
-            observation=timestep.obs,
-            done=timestep.done,
-            action=timestep.action,
-            reward=add_feature_axis(timestep.reward),
+            *state.timestep.to_sequence(),
             initial_carry=state.carry,
             rngs={"torso": torso_key},
             mutable=["intermediates"],
@@ -89,9 +83,7 @@ class DQN:
         state = state.replace(carry=carry)
         return state, action, intermediates
 
-    def _random_action(
-        self, key: Key, state: DQNState
-    ) -> tuple[DQNState, Array, dict]:
+    def _random_action(self, key: Key, state: DQNState) -> tuple[DQNState, Array, dict]:
         action_key = jax.random.split(key, self.cfg.num_envs)
         action = jax.vmap(self.env.action_space(self.env_params).sample)(action_key)
         return state, action, {}
@@ -112,7 +104,9 @@ class DQN:
         )
         return state, action, intermediates
 
-    def _step(self, state: DQNState, key: Key, *, policy: Callable) -> tuple[DQNState, Transition]:
+    def _step(
+        self, state: DQNState, key: Key, *, policy: Callable
+    ) -> tuple[DQNState, Transition]:
         action_key, step_key = jax.random.split(key)
 
         initial_carry = state.carry
@@ -191,19 +185,13 @@ class DQN:
             )
             initial_carry, (_, _) = self.q_network.apply(
                 jax.lax.stop_gradient(state.params),
-                observation=burn_in.first.obs,
-                done=burn_in.first.done,
-                action=burn_in.first.action,
-                reward=add_feature_axis(burn_in.first.reward),
+                *burn_in.first,
                 initial_carry=initial_carry,
             )
             initial_carry = jax.lax.stop_gradient(initial_carry)
             initial_target_carry, (_, _) = self.q_network.apply(
                 jax.lax.stop_gradient(state.target_params),
-                observation=burn_in.second.obs,
-                done=burn_in.second.done,
-                action=burn_in.second.action,
-                reward=add_feature_axis(burn_in.second.reward),
+                *burn_in.second,
                 initial_carry=initial_target_carry,
             )
             initial_target_carry = jax.lax.stop_gradient(initial_target_carry)
@@ -213,24 +201,21 @@ class DQN:
 
         _, (next_target_q_values, _) = self.q_network.apply(
             state.target_params,
-            observation=experience.second.obs,
-            done=experience.second.done,
-            action=experience.second.action,
-            reward=add_feature_axis(experience.second.reward),
+            *experience.second,
             initial_carry=initial_target_carry,
             rngs={"torso": next_torso_key},
         )
         next_target_q_value = jnp.max(next_target_q_values, axis=-1)
 
-        td_target = self.q_network.head.get_target(experience, next_target_q_value)
+        td_target = (
+            experience.second.reward
+            + self.q_network.head.gamma * (1 - experience.second.done) * next_target_q_value
+        )
 
         def loss_fn(params: PyTree):
             carry, (q_values, aux) = self.q_network.apply(
                 params,
-                observation=experience.first.obs,
-                done=experience.first.done,
-                action=experience.first.action,
-                reward=add_feature_axis(experience.first.reward),
+                *experience.first,
                 initial_carry=initial_carry,
                 rngs={"torso": torso_key},
             )
@@ -246,7 +231,7 @@ class DQN:
         (loss, (q_value, td_error, carry)), grads = jax.value_and_grad(
             loss_fn, has_aux=True
         )(state.params)
-        lox.log({"training/gradient_norm": optax.global_norm(grads)})
+        lox.log({"q_network/gradient_norm": optax.global_norm(grads)})
         updates, optimizer_state = self.optimizer.update(
             grads, state.optimizer_state, state.params
         )
@@ -259,7 +244,16 @@ class DQN:
             self.cfg.tau,
         )
 
-        lox.log({"losses/loss": loss, "training/q_value": q_value.mean(), "losses/td_error": td_error.mean(), "training/epsilon": self.epsilon_schedule(state.step), "training/step": state.step, "training/update_step": state.update_step})
+        lox.log(
+            {
+                "losses/loss": loss,
+                "q_network/q_value": q_value.mean(),
+                "losses/td_error": td_error.mean(),
+                "training/epsilon": self.epsilon_schedule(state.step),
+                "training/step": state.step,
+                "training/update_step": state.update_step,
+            }
+        )
 
         state = state.replace(
             params=params,
@@ -272,7 +266,9 @@ class DQN:
     def _update_step(self, state: DQNState, key: Key) -> tuple[DQNState, None]:
         step_key, update_key = jax.random.split(key)
 
-        step_keys = jax.random.split(step_key, self.cfg.train_frequency // self.cfg.num_envs)
+        step_keys = jax.random.split(
+            step_key, self.cfg.train_frequency // self.cfg.num_envs
+        )
         state, _ = jax.lax.scan(
             partial(self._step, policy=self._epsilon_greedy_action),
             state,
@@ -303,10 +299,7 @@ class DQN:
         ).to_sequence()
         params = target_params = self.q_network.init(
             {"params": q_key, "torso": torso_key},
-            observation=timestep.obs,
-            done=timestep.done,
-            action=timestep.action,
-            reward=add_feature_axis(timestep.reward),
+            *timestep,
             initial_carry=carry,
         )
         optimizer_state = self.optimizer.init(params)

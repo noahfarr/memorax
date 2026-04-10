@@ -10,7 +10,7 @@ import optax
 from flax import core, struct
 
 from memorax.utils import Timestep, Transition
-from memorax.utils.axes import add_feature_axis, remove_feature_axis, remove_time_axis
+from memorax.utils.axes import remove_feature_axis, remove_time_axis
 from memorax.utils.typing import (
     Array,
     Carry,
@@ -76,13 +76,9 @@ class PPO:
     def _deterministic_action(
         self, key: Key, state: PPOState
     ) -> tuple[PPOState, Array, Array, None, dict]:
-        timestep = state.timestep.to_sequence()
         (actor_carry, (probs, _)), intermediates = self.actor_network.apply(
             state.actor_params,
-            observation=timestep.obs,
-            done=timestep.done,
-            action=timestep.action,
-            reward=add_feature_axis(timestep.reward),
+            *state.timestep.to_sequence(),
             initial_carry=state.actor_carry,
             mutable=["intermediates"],
         )
@@ -107,13 +103,10 @@ class PPO:
     ) -> tuple[PPOState, Array, Array, Array, dict]:
         action_key, actor_torso_key, critic_torso_key = jax.random.split(key, 3)
 
-        timestep = state.timestep.to_sequence()
+        ts = state.timestep.to_sequence()
         (actor_carry, (probs, _)), intermediates = self.actor_network.apply(
             state.actor_params,
-            observation=timestep.obs,
-            done=timestep.done,
-            action=timestep.action,
-            reward=add_feature_axis(timestep.reward),
+            *ts,
             initial_carry=state.actor_carry,
             rngs={"torso": actor_torso_key},
             mutable=["intermediates"],
@@ -122,10 +115,7 @@ class PPO:
 
         critic_carry, (value, _) = self.critic_network.apply(
             state.critic_params,
-            observation=timestep.obs,
-            done=timestep.done,
-            action=timestep.action,
-            reward=add_feature_axis(timestep.reward),
+            *ts,
             initial_carry=state.critic_carry,
             rngs={"torso": critic_torso_key},
         )
@@ -145,7 +135,8 @@ class PPO:
     def _generalized_advantage_estimation(self, carry: tuple, transition: Transition):
         advantage, next_value = carry
         delta = (
-            self.critic_network.head.get_target(transition, next_value)
+            transition.second.reward
+            + self.critic_network.head.gamma * (1 - transition.second.done) * next_value
             - transition.aux["value"]
         )
         advantage = (
@@ -225,10 +216,7 @@ class PPO:
             )
             initial_actor_carry, (_, _) = self.actor_network.apply(
                 jax.lax.stop_gradient(state.actor_params),
-                observation=burn_in.first.obs,
-                done=burn_in.first.done,
-                action=burn_in.first.action,
-                reward=add_feature_axis(burn_in.first.reward),
+                *burn_in.first,
                 initial_carry=initial_actor_carry,
             )
             initial_actor_carry = jax.lax.stop_gradient(initial_actor_carry)
@@ -241,10 +229,7 @@ class PPO:
         def actor_loss_fn(params: PyTree):
             _, (probs, _) = self.actor_network.apply(
                 params,
-                observation=transitions.first.obs,
-                done=transitions.first.done,
-                action=transitions.first.action,
-                reward=add_feature_axis(transitions.first.reward),
+                *transitions.first,
                 initial_carry=initial_actor_carry,
                 rngs={"torso": torso_key, "dropout": dropout_key},
             )
@@ -274,7 +259,7 @@ class PPO:
         (actor_loss, aux), actor_grads = jax.value_and_grad(
             actor_loss_fn, has_aux=True
         )(state.actor_params)
-        lox.log({"training/actor/gradient_norm": optax.global_norm(actor_grads)})
+        lox.log({"actor/gradient_norm": optax.global_norm(actor_grads)})
         actor_updates, actor_optimizer_state = self.actor_optimizer.update(
             actor_grads, state.actor_optimizer_state, state.actor_params
         )
@@ -297,10 +282,7 @@ class PPO:
             )
             initial_critic_carry, (_, _) = self.critic_network.apply(
                 jax.lax.stop_gradient(state.critic_params),
-                observation=burn_in.first.obs,
-                done=burn_in.first.done,
-                action=burn_in.first.action,
-                reward=add_feature_axis(burn_in.first.reward),
+                *burn_in.first,
                 initial_carry=initial_critic_carry,
             )
             initial_critic_carry = jax.lax.stop_gradient(initial_critic_carry)
@@ -313,10 +295,7 @@ class PPO:
         def critic_loss_fn(params: PyTree):
             _, (values, aux) = self.critic_network.apply(
                 params,
-                observation=transitions.first.obs,
-                done=transitions.first.done,
-                action=transitions.first.action,
-                reward=add_feature_axis(transitions.first.reward),
+                *transitions.first,
                 initial_carry=initial_critic_carry,
                 rngs={"torso": torso_key, "dropout": dropout_key},
             )
@@ -343,7 +322,7 @@ class PPO:
             state.critic_params
         )
         explained_variance = 1 - jnp.var(returns - values) / jnp.var(returns)
-        lox.log({"training/critic/gradient_norm": optax.global_norm(critic_grads), "training/critic/explained_variance": explained_variance, "training/value": values.mean()})
+        lox.log({"critic/gradient_norm": optax.global_norm(critic_grads), "critic/explained_variance": explained_variance, "critic/value": values.mean()})
         critic_updates, critic_optimizer_state = self.critic_optimizer.update(
             critic_grads, state.critic_optimizer_state, state.critic_params
         )
@@ -455,13 +434,9 @@ class PPO:
             step_keys,
         )
 
-        timestep = state.timestep.to_sequence()
         _, (value, _) = self.critic_network.apply(
             state.critic_params,
-            observation=timestep.obs,
-            done=timestep.done,
-            action=timestep.action,
-            reward=add_feature_axis(timestep.reward),
+            *state.timestep.to_sequence(),
             initial_carry=state.critic_carry,
         )
         value = remove_time_axis(value)
@@ -504,8 +479,8 @@ class PPO:
                 "losses/actor/loss": actor_loss,
                 "losses/critic/loss": critic_loss,
                 "losses/actor/entropy": entropy,
-                "training/approximate_kl": approximate_kl,
-                "training/clip_fraction": clip_fraction,
+                "actor/approximate_kl": approximate_kl,
+                "actor/clip_fraction": clip_fraction,
                 "training/step": state.step,
                 "training/update_step": state.update_step,
             }
@@ -546,10 +521,7 @@ class PPO:
                 "torso": actor_torso_key,
                 "dropout": actor_dropout_key,
             },
-            observation=timestep.obs,
-            done=timestep.done,
-            action=timestep.action,
-            reward=add_feature_axis(timestep.reward),
+            *timestep,
             initial_carry=actor_carry,
         )
         critic_params = self.critic_network.init(
@@ -558,10 +530,7 @@ class PPO:
                 "torso": critic_torso_key,
                 "dropout": critic_dropout_key,
             },
-            observation=timestep.obs,
-            done=timestep.done,
-            action=timestep.action,
-            reward=add_feature_axis(timestep.reward),
+            *timestep,
             initial_carry=critic_carry,
         )
 

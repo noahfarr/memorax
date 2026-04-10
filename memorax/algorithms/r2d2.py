@@ -112,13 +112,13 @@ class R2D2:
         self, key: Key, state: R2D2State
     ) -> tuple[R2D2State, Array, Array, dict]:
         torso_key = key
-        timestep = state.timestep.to_sequence()
+        obs, done, action, reward = state.timestep.to_sequence()
         (carry, (q_values, _)), intermediates = self.q_network.apply(
             state.params,
-            observation=timestep.obs,
-            done=timestep.done,
-            action=timestep.action,
-            reward=add_feature_axis(timestep.reward),
+            observation=obs,
+            done=done,
+            action=action,
+            reward=reward,
             initial_carry=state.carry,
             rngs={"torso": torso_key},
             mutable=["intermediates"],
@@ -229,21 +229,23 @@ class R2D2:
             burn_in = jax.tree.map(
                 lambda x: x[:, : self.cfg.burn_in_length], experience
             )
+            obs, done, action, reward = burn_in.first
             initial_carry, (_, _) = self.q_network.apply(
                 jax.lax.stop_gradient(state.params),
-                observation=burn_in.first.obs,
-                done=burn_in.first.done,
-                action=burn_in.first.action,
-                reward=add_feature_axis(burn_in.first.reward),
+                observation=obs,
+                done=done,
+                action=action,
+                reward=reward,
                 initial_carry=initial_carry,
             )
             initial_carry = jax.lax.stop_gradient(initial_carry)
+            obs, done, action, reward = burn_in.second
             initial_target_carry, (_, _) = self.q_network.apply(
                 jax.lax.stop_gradient(state.target_params),
-                observation=burn_in.second.obs,
-                done=burn_in.second.done,
-                action=burn_in.second.action,
-                reward=add_feature_axis(burn_in.second.reward),
+                observation=obs,
+                done=done,
+                action=action,
+                reward=reward,
                 initial_carry=initial_target_carry,
             )
             initial_target_carry = jax.lax.stop_gradient(initial_target_carry)
@@ -251,12 +253,13 @@ class R2D2:
                 lambda x: x[:, self.cfg.burn_in_length :], experience
             )
 
+        next_obs, next_done, next_action, next_reward = experience.second
         _, (next_target_q_values, _) = self.q_network.apply(
             state.target_params,
-            observation=experience.second.obs,
-            done=experience.second.done,
-            action=experience.second.action,
-            reward=add_feature_axis(experience.second.reward),
+            observation=next_obs,
+            done=next_done,
+            action=next_action,
+            reward=next_reward,
             initial_carry=initial_target_carry,
             rngs={"torso": next_torso_key},
         )
@@ -276,7 +279,10 @@ class R2D2:
             experience = jax.tree.map(lambda x: x[:, :num_targets], experience)
             td_target = n_step_targets
         else:
-            td_target = self.q_network.head.get_target(experience, next_target_q_value)
+            td_target = (
+                experience.second.reward
+                + self.q_network.head.gamma * (1 - experience.second.done) * next_target_q_value
+            )
 
         beta = self.beta_schedule(state.step)
         add_batch_size, max_length_time_axis = get_tree_shape_prefix(
@@ -294,13 +300,15 @@ class R2D2:
         )
         importance_weights = importance_weights[:, None]
 
+        first_obs, first_done, first_action, first_reward = experience.first
+
         def loss_fn(params: PyTree):
             carry, (q_values, aux) = self.q_network.apply(
                 params,
-                observation=experience.first.obs,
-                done=experience.first.done,
-                action=experience.first.action,
-                reward=add_feature_axis(experience.first.reward),
+                observation=first_obs,
+                done=first_done,
+                action=first_action,
+                reward=first_reward,
                 initial_carry=initial_carry,
                 rngs={"torso": torso_key},
             )
@@ -320,7 +328,7 @@ class R2D2:
         (loss, (q_value, td_error, carry)), grads = jax.value_and_grad(
             loss_fn, has_aux=True
         )(state.params)
-        lox.log({"training/gradient_norm": optax.global_norm(grads)})
+        lox.log({"q_network/gradient_norm": optax.global_norm(grads)})
 
         updates, optimizer_state = self.optimizer.update(
             grads, state.optimizer_state, state.params
@@ -342,7 +350,7 @@ class R2D2:
 
         info = {
             "losses/loss": loss,
-            "training/q_value": q_value.mean(),
+            "q_network/q_value": q_value.mean(),
             "losses/td_error": mean_td_error.mean(),
             "training/epsilon": self.epsilon_schedule(state.step),
         }
@@ -390,12 +398,13 @@ class R2D2:
         timestep = Timestep(
             obs=obs, action=action, reward=reward, done=done
         ).to_sequence()
+        ts_obs, ts_done, ts_action, ts_reward = timestep
         params = self.q_network.init(
             {"params": q_key, "torso": torso_key},
-            observation=timestep.obs,
-            done=timestep.done,
-            action=timestep.action,
-            reward=add_feature_axis(timestep.reward),
+            observation=ts_obs,
+            done=ts_done,
+            action=ts_action,
+            reward=ts_reward,
             initial_carry=carry,
         )
         target_params = params

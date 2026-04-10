@@ -23,14 +23,6 @@ class DiscreteQNetwork(nn.Module):
         )(x)
         return q_values, {}
 
-    @nn.nowrap
-    def get_target(self, transition, next_value) -> Array:
-        next_value = jax.lax.stop_gradient(next_value)
-        return (
-            transition.second.reward
-            + self.gamma * (1 - transition.second.done) * next_value
-        )
-
     def loss(
         self, output: Array, aux: dict, targets: Array, **kwargs
     ) -> Array:
@@ -50,14 +42,6 @@ class ContinuousQNetwork(nn.Module):
             jnp.concatenate([x, action], axis=-1)
         )
         return jnp.squeeze(q_values, -1), {}
-
-    @nn.nowrap
-    def get_target(self, transition, next_value) -> Array:
-        next_value = jax.lax.stop_gradient(next_value)
-        return (
-            transition.second.reward
-            + self.gamma * (1 - transition.second.done) * next_value
-        )
 
     def loss(
         self, output: Array, aux: dict, targets: Array, **kwargs
@@ -79,14 +63,6 @@ class TwinContinuousQNetwork(nn.Module):
         q2 = nn.Dense(1, kernel_init=self.kernel_init, bias_init=self.bias_init, name="q2")(inp)
         return (jnp.squeeze(q1, -1), jnp.squeeze(q2, -1)), {}
 
-    @nn.nowrap
-    def get_target(self, transition, next_value) -> Array:
-        next_value = jax.lax.stop_gradient(next_value)
-        return (
-            transition.second.reward
-            + self.gamma * (1 - transition.second.done) * next_value
-        )
-
     def loss(
         self, output: Array, aux: dict, targets: Array, **kwargs
     ) -> Array:
@@ -102,14 +78,6 @@ class VNetwork(nn.Module):
     def __call__(self, x: Array, **kwargs) -> tuple[Array, dict]:
         v_value = nn.Dense(1, kernel_init=self.kernel_init, bias_init=self.bias_init)(x)
         return v_value, {}
-
-    @nn.nowrap
-    def get_target(self, transition, next_value) -> Array:
-        next_value = jax.lax.stop_gradient(next_value)
-        return (
-            transition.second.reward
-            + self.gamma * (1 - transition.second.done) * next_value
-        )
 
     def loss(
         self, output: Array, aux: dict, targets: Array, **kwargs
@@ -139,14 +107,6 @@ class HLGaussVNetwork(nn.Module):
         probs = jax.nn.softmax(logits, axis=-1)
         value = jnp.sum(probs * self.bin_centers, axis=-1, keepdims=True)
         return value, {"logits": logits}
-
-    @nn.nowrap
-    def get_target(self, transition, next_value) -> Array:
-        next_value = jax.lax.stop_gradient(next_value)
-        return (
-            transition.second.reward
-            + self.gamma * (1 - transition.second.done) * next_value
-        )
 
     @nn.nowrap
     def loss(
@@ -208,14 +168,6 @@ class C51QNetwork(nn.Module):
         q_values = jnp.sum(probs * self.atoms, axis=-1)
 
         return q_values, {"logits": logits, "probs": probs}
-
-    @nn.nowrap
-    def get_target(self, transition, next_value) -> Array:
-        next_value = jax.lax.stop_gradient(next_value)
-        return (
-            transition.second.reward
-            + self.gamma * (1 - transition.second.done) * next_value
-        )
 
     @nn.nowrap
     def loss(
@@ -368,10 +320,6 @@ class Horde(nn.Module):
         for name, demon in self.demons.items():
             demons[name] = demon(x, **kwargs)
         return output, {**aux, "demons": demons}
-
-    @nn.nowrap
-    def get_target(self, transition: PyTree, next_value: Array) -> Array:
-        return self.head.get_target(transition, next_value)
 
     @nn.nowrap
     def loss(self, output: Array, aux: dict, targets: Array, **kwargs) -> Array:

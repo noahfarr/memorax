@@ -67,13 +67,13 @@ class PQN:
     def _greedy_action(
         self, key: Key, state: PQNState
     ) -> tuple[PQNState, Array, Array, dict]:
-        timestep = state.timestep.to_sequence()
+        obs, done, action, reward = state.timestep.to_sequence()
         (carry, (q_values, _)), intermediates = self.q_network.apply(
             state.params,
-            observation=timestep.obs,
-            done=timestep.done,
-            action=timestep.action,
-            reward=add_feature_axis(timestep.reward),
+            observation=obs,
+            done=done,
+            action=action,
+            reward=reward,
             initial_carry=state.carry,
             mutable=["intermediates"],
         )
@@ -163,7 +163,10 @@ class PQN:
 
     def _td_lambda(self, carry: tuple, transition: Transition):
         lambda_return, next_q_value = carry
-        target_bootstrap = self.q_network.head.get_target(transition, next_q_value)
+        target_bootstrap = (
+            transition.second.reward
+            + self.q_network.head.gamma * (1 - transition.second.done) * next_q_value
+        )
 
         delta = lambda_return - next_q_value
         lambda_return = (
@@ -225,12 +228,13 @@ class PQN:
             burn_in = jax.tree.map(
                 lambda x: x[:, : self.cfg.burn_in_length], transitions
             )
+            obs, done, action, reward = burn_in.first
             carry, (_, _) = self.q_network.apply(
                 jax.lax.stop_gradient(state.params),
-                observation=burn_in.first.obs,
-                done=burn_in.first.done,
-                action=burn_in.first.action,
-                reward=add_feature_axis(burn_in.first.reward),
+                observation=obs,
+                done=done,
+                action=action,
+                reward=reward,
                 initial_carry=carry,
             )
             carry = jax.lax.stop_gradient(carry)
@@ -240,13 +244,15 @@ class PQN:
 
         target = transitions.aux["targets"]
 
+        first_obs, first_done, first_action, first_reward = transitions.first
+
         def loss_fn(params: PyTree):
             _, (q_values, aux) = self.q_network.apply(
                 params,
-                observation=transitions.first.obs,
-                done=transitions.first.done,
-                action=transitions.first.action,
-                reward=add_feature_axis(transitions.first.reward),
+                observation=first_obs,
+                done=first_done,
+                action=first_action,
+                reward=first_reward,
                 initial_carry=carry,
                 rngs={"torso": torso_key, "dropout": dropout_key},
             )
@@ -264,7 +270,7 @@ class PQN:
             )
 
         (loss, aux), grads = jax.value_and_grad(loss_fn, has_aux=True)(state.params)
-        lox.log({"training/q_network/gradient_norm": optax.global_norm(grads)})
+        lox.log({"q_network/gradient_norm": optax.global_norm(grads)})
         updates, optimizer_state = self.optimizer.update(
             grads, state.optimizer_state, state.params
         )
@@ -289,17 +295,17 @@ class PQN:
             step_keys,
         )
 
-        timestep = state.timestep.to_sequence()
+        obs, done, action, reward = state.timestep.to_sequence()
         _, (q_values, _) = self.q_network.apply(
             state.params,
-            observation=timestep.obs,
-            done=timestep.done,
-            action=timestep.action,
-            reward=add_feature_axis(timestep.reward),
+            observation=obs,
+            done=done,
+            action=action,
+            reward=reward,
             initial_carry=state.carry,
             rngs={"torso": torso_key},
         )
-        q_value = jnp.max(q_values, axis=-1) * (1.0 - timestep.done)
+        q_value = jnp.max(q_values, axis=-1) * (1.0 - done)
         q_value = remove_time_axis(q_value)
 
         _, targets = jax.lax.scan(
@@ -323,7 +329,7 @@ class PQN:
             {
                 "losses/q_network/loss": loss,
                 "losses/q_network/td_error": td_error,
-                "training/q_network/q_value": q_value,
+                "q_network/q_value": q_value,
                 "training/epsilon": self.epsilon_schedule(state.step),
                 "training/step": state.step,
                 "training/update_step": state.update_step,
@@ -350,12 +356,13 @@ class PQN:
         ).to_sequence()
 
         carry = self.q_network.initialize_carry((self.cfg.num_envs, None))
+        ts_obs, ts_done, ts_action, ts_reward = timestep
         params = self.q_network.init(
             {"params": q_key, "torso": torso_key},
-            observation=timestep.obs,
-            done=timestep.done,
-            action=timestep.action,
-            reward=add_feature_axis(timestep.reward),
+            observation=ts_obs,
+            done=ts_done,
+            action=ts_action,
+            reward=ts_reward,
             initial_carry=carry,
         )
         optimizer_state = self.optimizer.init(params)
