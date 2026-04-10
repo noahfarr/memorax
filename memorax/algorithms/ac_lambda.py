@@ -20,6 +20,7 @@ from memorax.utils.typing import Array, Discrete, Environment, EnvParams, EnvSta
 @struct.dataclass(frozen=True)
 class ACLambdaConfig:
     num_envs: int
+    gamma: float
     trace_lambda: float
     actor_lr: float
     critic_lr: float
@@ -226,7 +227,7 @@ class ACLambda:
         next_value = remove_time_axis(next_value)
         next_value = remove_feature_axis(next_value)
 
-        gamma = self.critic_network.head.gamma
+        gamma = self.cfg.gamma
         td_error = next_reward + gamma * (1 - next_done) * next_value - value
 
         initial_actor_carry = jax.lax.stop_gradient(state.actor_carry)
@@ -296,8 +297,8 @@ class ACLambda:
         lox.log({
             "info": info,
             "intermediates": intermediates,
-            "losses/td_error": td_error.mean(),
-            "losses/actor/entropy": entropy,
+            "critic/td_error": td_error.mean(),
+            "actor/entropy": entropy,
             "critic/value": value.mean(),
             "training/step": state.step,
             "training/update_step": state.update_step,

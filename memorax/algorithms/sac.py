@@ -27,6 +27,7 @@ from memorax.utils.typing import (
 @struct.dataclass(frozen=True)
 class SACConfig:
     num_envs: int
+    gamma: float
     tau: float
     train_frequency: int
     target_update_frequency: int
@@ -347,8 +348,8 @@ class SAC:
             state.actor_params
         )
         lox.log({
-            "losses/actor/loss": actor_loss,
-            "losses/actor/entropy": -log_probs.mean(),
+            "actor/loss": actor_loss,
+            "actor/entropy": -log_probs.mean(),
             "actor/gradient_norm": optax.global_norm(grads),
         })
         updates, actor_optimizer_state = self.actor_optimizer.update(
@@ -397,7 +398,7 @@ class SAC:
         next_value = next_q - alpha * next_log_probs
         target_q = (
             experience.second.reward
-            + self.critic_network.head.gamma * (1 - experience.second.done) * next_value
+            + self.cfg.gamma * (1 - experience.second.done) * next_value
         )
 
         target_q = jax.lax.stop_gradient(target_q)
@@ -429,9 +430,9 @@ class SAC:
             state.critic_params
         )
         lox.log({
-            "losses/critic/loss": critic_loss,
-            "losses/critic/q1": q1.mean(),
-            "losses/critic/q2": q2.mean(),
+            "critic/loss": critic_loss,
+            "critic/q1": q1.mean(),
+            "critic/q2": q2.mean(),
             "critic/gradient_norm": optax.global_norm(grads),
         })
         updates, critic_optimizer_state = self.critic_optimizer.update(

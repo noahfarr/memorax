@@ -29,6 +29,7 @@ from memorax.utils.typing import (
 @struct.dataclass(frozen=True)
 class R2D2Config:
     num_envs: int
+    gamma: float
     tau: float
     target_update_frequency: int
     train_frequency: int
@@ -273,7 +274,7 @@ class R2D2:
                 experience.second.done,
                 next_target_q_value,
                 self.cfg.n_step,
-                self.q_network.head.gamma,
+                self.cfg.gamma,
             )
             _, num_targets = n_step_targets.shape
             experience = jax.tree.map(lambda x: x[:, :num_targets], experience)
@@ -281,7 +282,7 @@ class R2D2:
         else:
             td_target = (
                 experience.second.reward
-                + self.q_network.head.gamma * (1 - experience.second.done) * next_target_q_value
+                + self.cfg.gamma * (1 - experience.second.done) * next_target_q_value
             )
 
         beta = self.beta_schedule(state.step)

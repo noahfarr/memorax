@@ -18,6 +18,7 @@ from memorax.utils.typing import Array, Discrete, Environment, EnvParams, EnvSta
 class GradientPPOConfig:
     num_envs: int
     num_steps: int
+    gamma: float
     gae_lambda: float
     num_minibatches: int
     update_epochs: int
@@ -280,7 +281,7 @@ class GradientPPO:
         return state, actor_loss.mean(), aux
 
     def _compute_delta_lambda(self, critic_params: PyTree, transitions: Transition, initial_critic_carry: Carry):
-        gamma = self.critic_network.head.gamma
+        gamma = self.cfg.gamma
         first_obs, first_done, first_action, first_reward = transitions.first
         _, (values, _) = self.critic_network.apply(
             critic_params,
@@ -544,9 +545,9 @@ class GradientPPO:
             lambda x: x.mean(), metrics
         )
         lox.log({
-            "losses/actor/loss": actor_loss,
-            "losses/critic/loss": critic_loss,
-            "losses/actor/entropy": entropy,
+            "actor/loss": actor_loss,
+            "critic/loss": critic_loss,
+            "actor/entropy": entropy,
             "actor/approximate_kl": approximate_kl,
             "actor/clip_fraction": clip_fraction,
             "training/step": state.step,

@@ -26,6 +26,7 @@ from memorax.utils.typing import (
 class PQNConfig:
     num_envs: int
     num_steps: int
+    gamma: float
     td_lambda: float
     num_minibatches: int
     update_epochs: int
@@ -165,12 +166,12 @@ class PQN:
         lambda_return, next_q_value = carry
         target_bootstrap = (
             transition.second.reward
-            + self.q_network.head.gamma * (1 - transition.second.done) * next_q_value
+            + self.cfg.gamma * (1 - transition.second.done) * next_q_value
         )
 
         delta = lambda_return - next_q_value
         lambda_return = (
-            target_bootstrap + self.q_network.head.gamma * self.cfg.td_lambda * delta
+            target_bootstrap + self.cfg.gamma * self.cfg.td_lambda * delta
         )
 
         lambda_return = (

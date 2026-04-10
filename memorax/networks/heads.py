@@ -12,7 +12,6 @@ from memorax.utils.typing import Array, PyTree
 
 class DiscreteQNetwork(nn.Module):
     action_dim: int
-    gamma: float = 0.99
     kernel_init: nn.initializers.Initializer = nn.initializers.lecun_normal()
     bias_init: nn.initializers.Initializer = nn.initializers.zeros_init()
 
@@ -30,7 +29,6 @@ class DiscreteQNetwork(nn.Module):
 
 
 class ContinuousQNetwork(nn.Module):
-    gamma: float = 0.99
     kernel_init: nn.initializers.Initializer = nn.initializers.lecun_normal()
     bias_init: nn.initializers.Initializer = nn.initializers.zeros_init()
 
@@ -50,7 +48,6 @@ class ContinuousQNetwork(nn.Module):
 
 
 class TwinContinuousQNetwork(nn.Module):
-    gamma: float = 0.99
     kernel_init: nn.initializers.Initializer = nn.initializers.lecun_normal()
     bias_init: nn.initializers.Initializer = nn.initializers.zeros_init()
 
@@ -70,7 +67,6 @@ class TwinContinuousQNetwork(nn.Module):
 
 
 class VNetwork(nn.Module):
-    gamma: float = 0.99
     kernel_init: nn.initializers.Initializer = nn.initializers.lecun_normal()
     bias_init: nn.initializers.Initializer = nn.initializers.zeros_init()
 
@@ -91,7 +87,6 @@ class HLGaussVNetwork(nn.Module):
     num_bins: int = 101
     v_min: float = -10.0
     v_max: float = 10.0
-    gamma: float = 0.99
     kernel_init: nn.initializers.Initializer = nn.initializers.lecun_normal()
     bias_init: nn.initializers.Initializer = nn.initializers.zeros_init()
 
@@ -145,7 +140,6 @@ class C51QNetwork(nn.Module):
     num_atoms: int = 51
     v_min: float = -10.0
     v_max: float = 10.0
-    gamma: float = 0.99
     kernel_init: nn.initializers.Initializer = nn.initializers.lecun_normal()
     bias_init: nn.initializers.Initializer = nn.initializers.zeros_init()
 
@@ -309,10 +303,6 @@ class GVF(nn.Module):
 class Horde(nn.Module):
     head: nn.Module
     demons: dict[str, nn.Module]
-
-    @property
-    def gamma(self) -> float:
-        return self.head.gamma
 
     def __call__(self, x: Array, **kwargs) -> tuple[Array, dict]:
         output, aux = self.head(x, **kwargs)

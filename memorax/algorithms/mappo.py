@@ -30,6 +30,7 @@ from_sequence = lambda timestep: jax.tree.map(
 class MAPPOConfig:
     num_envs: int
     num_steps: int
+    gamma: float
     gae_lambda: float
     num_minibatches: int
     update_epochs: int
@@ -133,12 +134,12 @@ class MAPPO:
         advantage, next_value = carry
         delta = (
             transition.second.reward
-            + self.critic_network.head.gamma * (1 - transition.second.done) * next_value
+            + self.cfg.gamma * (1 - transition.second.done) * next_value
             - transition.aux["value"]
         )
         advantage = (
             delta
-            + self.critic_network.head.gamma
+            + self.cfg.gamma
             * self.cfg.gae_lambda
             * (1 - transition.second.done)
             * advantage
@@ -492,9 +493,9 @@ class MAPPO:
         )
         lox.log(
             {
-                "losses/actor/loss": actor_loss,
-                "losses/critic/loss": critic_loss,
-                "losses/actor/entropy": entropy,
+                "actor/loss": actor_loss,
+                "critic/loss": critic_loss,
+                "actor/entropy": entropy,
                 "actor/approximate_kl": approximate_kl,
                 "actor/clip_fraction": clip_fraction,
                 "training/step": state.step,

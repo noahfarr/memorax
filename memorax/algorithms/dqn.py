@@ -32,6 +32,7 @@ from memorax.utils.typing import (
 @struct.dataclass(frozen=True)
 class DQNConfig:
     num_envs: int
+    gamma: float
     tau: float
     target_update_frequency: int
     train_frequency: int
@@ -209,7 +210,7 @@ class DQN:
 
         td_target = (
             experience.second.reward
-            + self.q_network.head.gamma * (1 - experience.second.done) * next_target_q_value
+            + self.cfg.gamma * (1 - experience.second.done) * next_target_q_value
         )
 
         def loss_fn(params: PyTree):
