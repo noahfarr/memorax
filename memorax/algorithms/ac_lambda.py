@@ -293,7 +293,7 @@ class ACLambda:
             reward=jnp.where(state.timestep.done, 0, state.timestep.reward),
             done=state.timestep.done,
         )
-        second = Timestep(obs=None, action=action, reward=reward, done=done)
+        second = Timestep(obs=None, action=action, reward=next_reward, done=next_done)
         lox.log({
             "info": info,
             "intermediates": intermediates,
@@ -309,8 +309,8 @@ class ACLambda:
             timestep=Timestep(
                 obs=next_obs,
                 action=action,
-                reward=jnp.asarray(reward, dtype=jnp.float32),
-                done=done,
+                reward=jnp.asarray(next_reward, dtype=jnp.float32),
+                done=next_done,
             ),
             env_state=env_state,
             actor_params=actor_params,
