@@ -9,7 +9,7 @@ import lox
 import optax
 from flax import core, struct
 
-from memorax.utils import Timestep, Transition
+from memorax.utils import Timestep, Transition, utils
 from memorax.utils.axes import remove_feature_axis, remove_time_axis
 from memorax.utils.typing import (
     Array,
@@ -211,21 +211,12 @@ class PPO:
     ) -> tuple[PPOState, Array, tuple[Array, Array, Array]]:
         torso_key, dropout_key = jax.random.split(key)
 
-        if self.cfg.burn_in_length > 0:
-            burn_in = jax.tree.map(
-                lambda x: x[:, : self.cfg.burn_in_length], transitions
-            )
-            initial_actor_carry, (_, _) = self.actor_network.apply(
-                jax.lax.stop_gradient(state.actor_params),
-                *burn_in.first,
-                initial_carry=initial_actor_carry,
-            )
-            initial_actor_carry = jax.lax.stop_gradient(initial_actor_carry)
-            transitions = jax.tree.map(
-                lambda x: x[:, self.cfg.burn_in_length :], transitions
-            )
+        initial_actor_carry = utils.burn_in(
+            self.actor_network, state.actor_params, transitions.first, initial_actor_carry, self.cfg.burn_in_length
+        )
+        transitions = jax.tree.map(lambda x: x[:, self.cfg.burn_in_length:], transitions)
 
-        advantages = transitions.aux["advantages"].squeeze(-1)
+        advantages = transitions.aux["advantages"]
 
         def actor_loss_fn(params: PyTree):
             _, (probs, _) = self.actor_network.apply(
@@ -277,19 +268,10 @@ class PPO:
     ) -> tuple[PPOState, Array]:
         torso_key, dropout_key = jax.random.split(key)
 
-        if self.cfg.burn_in_length > 0:
-            burn_in = jax.tree.map(
-                lambda x: x[:, : self.cfg.burn_in_length], transitions
-            )
-            initial_critic_carry, (_, _) = self.critic_network.apply(
-                jax.lax.stop_gradient(state.critic_params),
-                *burn_in.first,
-                initial_carry=initial_critic_carry,
-            )
-            initial_critic_carry = jax.lax.stop_gradient(initial_critic_carry)
-            transitions = jax.tree.map(
-                lambda x: x[:, self.cfg.burn_in_length :], transitions
-            )
+        initial_critic_carry = utils.burn_in(
+            self.critic_network, state.critic_params, transitions.first, initial_critic_carry, self.cfg.burn_in_length
+        )
+        transitions = jax.tree.map(lambda x: x[:, self.cfg.burn_in_length:], transitions)
 
         returns = transitions.aux["returns"]
 

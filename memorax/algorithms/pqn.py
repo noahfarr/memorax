@@ -9,7 +9,7 @@ import lox
 import optax
 from flax import core, struct
 
-from memorax.utils import Timestep, Transition
+from memorax.utils import Timestep, Transition, utils
 from memorax.utils.axes import add_feature_axis, remove_feature_axis, remove_time_axis
 from memorax.utils.typing import (
     Array,
@@ -225,23 +225,8 @@ class PQN:
 
         torso_key, dropout_key = jax.random.split(key)
 
-        if self.cfg.burn_in_length > 0:
-            burn_in = jax.tree.map(
-                lambda x: x[:, : self.cfg.burn_in_length], transitions
-            )
-            obs, done, action, reward = burn_in.first
-            carry, (_, _) = self.q_network.apply(
-                jax.lax.stop_gradient(state.params),
-                observation=obs,
-                done=done,
-                action=action,
-                reward=reward,
-                initial_carry=carry,
-            )
-            carry = jax.lax.stop_gradient(carry)
-            transitions = jax.tree.map(
-                lambda x: x[:, self.cfg.burn_in_length :], transitions
-            )
+        carry = utils.burn_in(self.q_network, state.params, transitions.first, carry, self.cfg.burn_in_length)
+        transitions = jax.tree.map(lambda x: x[:, self.cfg.burn_in_length:], transitions)
 
         target = transitions.aux["targets"]
 

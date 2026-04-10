@@ -9,7 +9,7 @@ import lox
 import optax
 from flax import core, struct
 
-from memorax.utils import Timestep, Transition, periodic_incremental_update
+from memorax.utils import Timestep, Transition, periodic_incremental_update, utils
 from memorax.utils.axes import remove_time_axis
 from memorax.utils.typing import (
     Array,
@@ -467,47 +467,10 @@ class SAC:
         if experience.carry is not None:
             initial_actor_carry = jax.tree.map(lambda x: x[:, 0], experience.carry)
 
-        if self.cfg.burn_in_length > 0:
-            burn_in = jax.tree.map(
-                lambda x: x[:, : self.cfg.burn_in_length], experience
-            )
-            bi_obs, bi_done, bi_action, bi_reward = burn_in.first
-            initial_actor_carry, (_, _) = self.actor_network.apply(
-                jax.lax.stop_gradient(state.actor_params),
-                observation=bi_obs,
-                done=bi_done,
-                action=bi_action,
-                reward=bi_reward,
-                initial_carry=initial_actor_carry,
-            )
-            initial_actor_carry = jax.lax.stop_gradient(initial_actor_carry)
-
-            initial_critic_carry, _ = self.critic_network.apply(
-                jax.lax.stop_gradient(state.critic_params),
-                observation=bi_obs,
-                done=bi_done,
-                action=bi_action,
-                reward=bi_reward,
-                initial_carry=initial_critic_carry,
-            )
-            initial_critic_carry = jax.lax.stop_gradient(initial_critic_carry)
-
-            bi2_obs, bi2_done, bi2_action, bi2_reward = burn_in.second
-            initial_target_critic_carry, _ = self.critic_network.apply(
-                jax.lax.stop_gradient(state.critic_target_params),
-                observation=bi2_obs,
-                done=bi2_done,
-                action=bi2_action,
-                reward=bi2_reward,
-                initial_carry=initial_target_critic_carry,
-            )
-            initial_target_critic_carry = jax.lax.stop_gradient(
-                initial_target_critic_carry
-            )
-
-            experience = jax.tree.map(
-                lambda x: x[:, self.cfg.burn_in_length :], experience
-            )
+        initial_actor_carry = utils.burn_in(self.actor_network, state.actor_params, experience.first, initial_actor_carry, self.cfg.burn_in_length)
+        initial_critic_carry = utils.burn_in(self.critic_network, state.critic_params, experience.first, initial_critic_carry, self.cfg.burn_in_length)
+        initial_target_critic_carry = utils.burn_in(self.critic_network, state.critic_target_params, experience.second, initial_target_critic_carry, self.cfg.burn_in_length)
+        experience = jax.tree.map(lambda x: x[:, self.cfg.burn_in_length:], experience)
 
         state = self._update_critic(
             critic_key,

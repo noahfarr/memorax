@@ -9,7 +9,7 @@ import lox
 import optax
 from flax import core, struct
 
-from memorax.utils import Timestep, Transition, periodic_incremental_update
+from memorax.utils import Timestep, Transition, periodic_incremental_update, utils
 from memorax.utils.axes import (
     add_feature_axis,
     add_time_axis,
@@ -180,25 +180,9 @@ class DQN:
             initial_carry = jax.tree.map(lambda x: x[:, 0], experience.carry)
             initial_target_carry = jax.tree.map(lambda x: x[:, 0], experience.carry)
 
-        if self.cfg.burn_in_length > 0:
-            burn_in = jax.tree.map(
-                lambda x: x[:, : self.cfg.burn_in_length], experience
-            )
-            initial_carry, (_, _) = self.q_network.apply(
-                jax.lax.stop_gradient(state.params),
-                *burn_in.first,
-                initial_carry=initial_carry,
-            )
-            initial_carry = jax.lax.stop_gradient(initial_carry)
-            initial_target_carry, (_, _) = self.q_network.apply(
-                jax.lax.stop_gradient(state.target_params),
-                *burn_in.second,
-                initial_carry=initial_target_carry,
-            )
-            initial_target_carry = jax.lax.stop_gradient(initial_target_carry)
-            experience = jax.tree.map(
-                lambda x: x[:, self.cfg.burn_in_length :], experience
-            )
+        initial_carry = utils.burn_in(self.q_network, state.params, experience.first, initial_carry, self.cfg.burn_in_length)
+        initial_target_carry = utils.burn_in(self.q_network, state.target_params, experience.second, initial_target_carry, self.cfg.burn_in_length)
+        experience = jax.tree.map(lambda x: x[:, self.cfg.burn_in_length:], experience)
 
         _, (next_target_q_values, _) = self.q_network.apply(
             state.target_params,

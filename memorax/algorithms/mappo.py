@@ -223,7 +223,7 @@ class MAPPO:
                 lambda x: x[:, :, self.cfg.burn_in_length :], transitions
             )
 
-        advantages = transitions.aux["advantages"].squeeze(-1)
+        advantages = transitions.aux["advantages"]
 
         def actor_loss_fn(params: PyTree):
             _, (probs, _) = self.actor_network.apply(
