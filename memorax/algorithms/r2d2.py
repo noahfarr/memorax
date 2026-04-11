@@ -326,9 +326,9 @@ class R2D2:
         )
 
         info = {
-            "losses/loss": loss,
+            "q_network/loss": loss,
             "q_network/q_value": q_value.mean(),
-            "losses/td_error": mean_td_error.mean(),
+            "q_network/td_error": mean_td_error.mean(),
             "training/epsilon": self.epsilon_schedule(state.step),
         }
 

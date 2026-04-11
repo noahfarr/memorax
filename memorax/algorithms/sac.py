@@ -294,8 +294,8 @@ class SAC:
             state.alpha_params
         )
         lox.log({
-            "losses/alpha/loss": alpha_loss,
-            "losses/alpha/value": alpha,
+            "alpha/loss": alpha_loss,
+            "alpha/value": alpha,
             "alpha/gradient_norm": optax.global_norm(grads),
         })
         updates, optimizer_state = self.alpha_optimizer.update(

@@ -313,8 +313,8 @@ class PQN:
         loss, q_value, td_error = metrics
         lox.log(
             {
-                "losses/q_network/loss": loss,
-                "losses/q_network/td_error": td_error,
+                "q_network/loss": loss,
+                "q_network/td_error": td_error,
                 "q_network/q_value": q_value,
                 "training/epsilon": self.epsilon_schedule(state.step),
                 "training/step": state.step,

@@ -231,9 +231,9 @@ class DQN:
 
         lox.log(
             {
-                "losses/loss": loss,
+                "q_network/loss": loss,
                 "q_network/q_value": q_value.mean(),
-                "losses/td_error": td_error.mean(),
+                "q_network/td_error": td_error.mean(),
                 "training/epsilon": self.epsilon_schedule(state.step),
                 "training/step": state.step,
                 "training/update_step": state.update_step,

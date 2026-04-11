@@ -17,15 +17,15 @@ authors = [{ name = "Noah Farr" }]
 keywords = ["jax", "flax", "reinforcement-learning", "memory", "rnn", "ssm", "transformer", "pomdp"]
 
 dependencies = [
-    "jax>=0.7.2",
-    "flax>=0.10.7",
+    "jax[cuda12]>=0.7.0 ; sys_platform == 'linux'",
+    "jax>=0.7.0 ; sys_platform == 'darwin'",
+    "flax>=0.10.2",
     "lox",
     "distrax>=0.1.5",
-    "flashbax>=0.1.3",
-    "gymnax>=0.0.9",
-    "wandb>=0.21.0",
-    "neptune-scale>=0.27.0",
-    "tensorboardx>=2.6.4",
+    "flashbax>=0.1.0",
+    "gymnax>=0.0.6",
+    "wandb>=0.20.0",
+    "tensorboardx>=2.6.1",
     "hydra-core",
 ]
 
@@ -54,7 +54,7 @@ jaxmarl   = ["jaxmarl", "brax"]
 
 environments = [
     "brax>=0.12.4",
-    "gymnax>=0.0.9",
+    "gymnax>=0.0.6",
     "jumanji>=1.1.1",
     "navix>=0.7.0",
     "craftax>=1.5.0",
@@ -67,8 +67,6 @@ environments = [
     "pobax",
     "xminigrid",
 ]
-
-cuda = ["jax[cuda12]>=0.7.2"]
 
 [dependency-groups]
 development = ["pre-commit>=4.2.0", "pytest", "pyright"]

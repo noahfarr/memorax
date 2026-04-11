@@ -34,6 +34,7 @@ class QRCConfig:
 @struct.dataclass(frozen=True)
 class QRCState:
     step: int
+    update_step: int
     timestep: Timestep
     q_carry: Carry
     h_carry: Carry
@@ -196,13 +197,16 @@ class QRC:
             state.h_params,
         )
 
+        q_grads = jax.tree.map(lambda x: -x.mean(axis=0), q_updates)
+        h_grads = jax.tree.map(lambda x: -x.mean(axis=0), h_updates)
+
         q_param_updates, q_optimizer_state = self.q_optimizer.update(
-            jax.tree.map(lambda x: -x.mean(axis=0), q_updates),
+            q_grads,
             state.q_optimizer_state,
             state.q_params,
         )
         h_param_updates, h_optimizer_state = self.h_optimizer.update(
-            jax.tree.map(lambda x: -x.mean(axis=0), h_updates),
+            h_grads,
             state.h_optimizer_state,
             state.h_params,
         )
@@ -222,13 +226,18 @@ class QRC:
         q_traces = jax.tree.map(reset_trace, q_traces)
         h_traces = jax.tree.map(reset_trace, h_traces)
 
+        q_value = q_loss_fn(state.q_params)
         lox.log(
             {
-                "losses/td_error": td_errors.mean(),
-                "h_network/correction": correction.mean(),
+                "q_network/q_value": q_value.mean(),
+                "q_network/td_error": td_errors.mean(),
                 "q_network/h_trace": h_trace.mean(),
+                "q_network/gradient_norm": optax.global_norm(q_grads),
+                "h_network/correction": correction.mean(),
+                "h_network/gradient_norm": optax.global_norm(h_grads),
                 "training/epsilon": self.epsilon_schedule(state.step),
                 "training/step": state.step,
+                "training/update_step": state.update_step,
             }
         )
 
@@ -287,6 +296,7 @@ class QRC:
         return (
             state.replace(
                 step=state.step + self.cfg.num_envs,
+                update_step=state.update_step + 1,
                 timestep=Timestep(
                     obs=next_obs, action=action, reward=reward, done=done
                 ),
@@ -330,6 +340,7 @@ class QRC:
 
         return QRCState(
             step=0,
+            update_step=0,
             timestep=timestep,
             q_carry=q_carry,
             h_carry=h_carry,
