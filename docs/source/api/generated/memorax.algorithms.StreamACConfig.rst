@@ -1,9 +1,9 @@
-﻿memorax.algorithms.ACLambdaConfig
+memorax.algorithms.StreamACConfig
 =================================
 
 .. currentmodule:: memorax.algorithms
 
-.. autoclass:: ACLambdaConfig
+.. autoclass:: StreamACConfig
    :members:
    :show-inheritance:
    :inherited-members:

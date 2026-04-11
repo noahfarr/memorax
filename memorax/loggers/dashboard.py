@@ -76,7 +76,9 @@ class DashboardLogger:
         table.add_column(heading, justify="left", width=20, style="yellow")
         table.add_column("Value", justify="right", width=10, style="green")
         for name, value in metrics.items():
-            table.add_row(name, f"{jnp.mean(value):.3f} ± {jnp.std(value):.3f}")
+            mean, std = jnp.mean(value), jnp.std(value)
+            value_str = f"{mean:.3f} ± {std:.3f}" if std != 0 else f"{mean:.3f}"
+            table.add_row(name, value_str)
         return table
 
     def build_dashboard(

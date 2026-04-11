@@ -4,7 +4,7 @@ from dataclasses import asdict
 import flax.linen as nn
 import jax
 import lox
-from memorax.algorithms import ACLambda, ACLambdaConfig
+from memorax.algorithms import StreamAC, StreamACConfig
 from memorax.environments import environment
 from memorax.environments.wrappers import RecordEpisodeStatistics
 from memorax.loggers import DashboardLogger, MultiLogger
@@ -24,7 +24,7 @@ env = RecordEpisodeStatistics(env)
 
 num_actions = env.action_space(env_params).n
 
-config = ACLambdaConfig(
+config = StreamACConfig(
     num_envs=1,
     trace_lambda=0.8,
     actor_lr=1.0,
@@ -70,7 +70,7 @@ critic_network = Network(
     head=heads.VNetwork(gamma=0.99),
 )
 
-agent = ACLambda(config, env, env_params, actor_network, critic_network)
+agent = StreamAC(config, env, env_params, actor_network, critic_network)
 
 logger = MultiLogger(
     [

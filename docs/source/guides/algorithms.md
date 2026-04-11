@@ -12,7 +12,7 @@ Memorax provides several RL algorithms optimized for memory-augmented learning.
 | SAC | Continuous | Maximum entropy RL |
 | PQN | Discrete | On-policy Q-learning |
 | R2D2 | Discrete | Recurrent value-based with prioritized replay |
-| AC(Lambda) | Discrete | Online actor-critic with eligibility traces |
+| StreamAC | Discrete | Online actor-critic with eligibility traces |
 | GradientPPO | Discrete & Continuous | PPO with gradient eligibility traces |
 
 ## PPO (Proximal Policy Optimization)
@@ -134,14 +134,14 @@ config = MAPPOConfig(
 agent = MAPPO(config, env, env_params, actor, critic, optimizer, optimizer)
 ```
 
-## AC(Lambda) (Actor-Critic with Eligibility Traces)
+## StreamAC (Actor-Critic with Eligibility Traces)
 
 Online actor-critic with lambda-weighted eligibility traces for true online learning.
 
 ```python
-from memorax.algorithms import ACLambda, ACLambdaConfig
+from memorax.algorithms import StreamAC, StreamACConfig
 
-config = ACLambdaConfig(
+config = StreamACConfig(
     num_envs=8,
     trace_lambda=0.9,
     actor_lr=3e-4,
@@ -149,7 +149,7 @@ config = ACLambdaConfig(
     entropy_coefficient=0.01,
 )
 
-agent = ACLambda(config, env, env_params, actor, critic)
+agent = StreamAC(config, env, env_params, actor, critic)
 ```
 
 ## GradientPPO

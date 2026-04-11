@@ -1,9 +1,9 @@
-﻿memorax.algorithms.ACLambdaState
+memorax.algorithms.StreamACState
 ================================
 
 .. currentmodule:: memorax.algorithms
 
-.. autoclass:: ACLambdaState
+.. autoclass:: StreamACState
    :members:
    :show-inheritance:
    :inherited-members:

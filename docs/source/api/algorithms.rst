@@ -59,14 +59,14 @@ PQN
 
 :class:`PQNState` - Training state for PQN.
 
-ACLambda
+StreamAC
 --------
 
-:class:`ACLambda` - Actor-Critic with eligibility traces.
+:class:`StreamAC` - Actor-Critic with eligibility traces.
 
-:class:`ACLambdaConfig` - Configuration dataclass for ACLambda.
+:class:`StreamACConfig` - Configuration dataclass for StreamAC.
 
-:class:`ACLambdaState` - Training state for ACLambda.
+:class:`StreamACState` - Training state for StreamAC.
 
 GradientPPO
 ------------
@@ -99,9 +99,9 @@ GradientPPO
    PQN
    PQNConfig
    PQNState
-   ACLambda
-   ACLambdaConfig
-   ACLambdaState
+   StreamAC
+   StreamACConfig
+   StreamACState
    GradientPPO
    GradientPPOConfig
    GradientPPOState

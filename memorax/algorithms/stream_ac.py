@@ -18,7 +18,7 @@ from memorax.utils.typing import Array, Discrete, Environment, EnvParams, EnvSta
 
 
 @struct.dataclass(frozen=True)
-class ACLambdaConfig:
+class StreamACConfig:
     num_envs: int
     gamma: float
     trace_lambda: float
@@ -30,7 +30,7 @@ class ACLambdaConfig:
 
 
 @struct.dataclass(frozen=True)
-class ACLambdaState:
+class StreamACState:
     step: int
     update_step: int
     timestep: Timestep
@@ -44,16 +44,16 @@ class ACLambdaState:
 
 
 @dataclass
-class ACLambda:
-    cfg: ACLambdaConfig
+class StreamAC:
+    cfg: StreamACConfig
     env: Environment
     env_params: EnvParams
     actor_network: nn.Module
     critic_network: nn.Module
 
     def _deterministic_action(
-        self, key: Key, state: ACLambdaState
-    ) -> tuple[ACLambdaState, Array, Array, None, dict]:
+        self, key: Key, state: StreamACState
+    ) -> tuple[StreamACState, Array, Array, None, dict]:
         obs, done, action, reward = state.timestep.to_sequence()
         (actor_carry, (probs, _)), intermediates = self.actor_network.apply(
             state.actor_params,
@@ -76,8 +76,8 @@ class ACLambda:
         return state, action, log_prob, None, intermediates
 
     def _stochastic_action(
-        self, key: Key, state: ACLambdaState
-    ) -> tuple[ACLambdaState, Array, Array, Array, dict]:
+        self, key: Key, state: StreamACState
+    ) -> tuple[StreamACState, Array, Array, Array, dict]:
         action_key, actor_torso_key, critic_torso_key = jax.random.split(key, 3)
         obs, done, ts_action, reward = state.timestep.to_sequence()
 
@@ -111,8 +111,8 @@ class ACLambda:
         return state, action, log_prob, value, intermediates
 
     def _step(
-        self, state: ACLambdaState, key: Key, *, policy: Callable
-    ) -> tuple[ACLambdaState, Transition]:
+        self, state: StreamACState, key: Key, *, policy: Callable
+    ) -> tuple[StreamACState, Transition]:
         action_key, step_key = jax.random.split(key)
         state, action, log_prob, value, intermediates = policy(action_key, state)
 
@@ -175,7 +175,7 @@ class ACLambda:
 
         return jax.tree.map(compute_update, traces)
 
-    def _update_step(self, state: ACLambdaState, key: Key) -> tuple[ACLambdaState, None]:
+    def _update_step(self, state: StreamACState, key: Key) -> tuple[StreamACState, None]:
         action_key, step_key, actor_torso_key, critic_torso_key = jax.random.split(key, 4)
 
         obs, done, ts_action, reward = state.timestep.to_sequence()
@@ -323,7 +323,7 @@ class ACLambda:
 
         return state.replace(update_step=state.update_step + 1), None
 
-    def init(self, key: Key) -> ACLambdaState:
+    def init(self, key: Key) -> StreamACState:
         (
             env_key,
             actor_key,
@@ -382,7 +382,7 @@ class ACLambda:
             lambda p: jnp.zeros((self.cfg.num_envs, *p.shape)), critic_params
         )
 
-        return ACLambdaState(
+        return StreamACState(
             step=0,
             update_step=0,
             timestep=timestep.from_sequence(),
@@ -395,10 +395,10 @@ class ACLambda:
             critic_carry=critic_carry,
         )
 
-    def warmup(self, key: Key, state: ACLambdaState, num_steps: int) -> ACLambdaState:
+    def warmup(self, key: Key, state: StreamACState, num_steps: int) -> StreamACState:
         return state
 
-    def train(self, key: Key, state: ACLambdaState, num_steps: int) -> ACLambdaState:
+    def train(self, key: Key, state: StreamACState, num_steps: int) -> StreamACState:
         keys = jax.random.split(key, num_steps // self.cfg.num_envs)
         state, _ = jax.lax.scan(
             self._update_step,
@@ -407,7 +407,7 @@ class ACLambda:
         )
         return state
 
-    def evaluate(self, key: Key, state: ACLambdaState, num_steps: int) -> ACLambdaState:
+    def evaluate(self, key: Key, state: StreamACState, num_steps: int) -> StreamACState:
         reset_key, eval_key = jax.random.split(key)
         reset_key = jax.random.split(reset_key, self.cfg.num_envs)
         obs, env_state = jax.vmap(self.env.reset, in_axes=(0, None))(
