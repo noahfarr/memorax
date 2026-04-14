@@ -4,7 +4,7 @@ import jax.numpy as jnp
 from flax import linen as nn
 from flax import struct
 from flax.typing import Dtype
-from jax.nn.initializers import normal
+from jax.nn.initializers import lecun_normal
 
 from memorax.utils.typing import Array, Carry
 
@@ -60,12 +60,12 @@ class RTUCell(RNNCellBase):
         )
         self.B_real = self.param(
             "B_real",
-            normal(stddev=1.0 / jnp.sqrt(2 * self.config.features)),
+            lecun_normal(),
             (self.config.hidden_dim, self.config.features),
         )
         self.B_imag = self.param(
             "B_imag",
-            normal(stddev=1.0 / jnp.sqrt(2 * self.config.features)),
+            lecun_normal(),
             (self.config.hidden_dim, self.config.features),
         )
 
