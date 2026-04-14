@@ -27,6 +27,9 @@ class StreamACConfig:
     actor_kappa: float = 3.0
     critic_kappa: float = 2.0
     entropy_coefficient: float = 0.01
+    adaptive: bool = False
+    beta2: float = 0.999
+    eps: float = 1e-8
 
 
 @struct.dataclass(frozen=True)
@@ -37,9 +40,11 @@ class StreamACState:
     env_state: EnvState
     actor_params: core.FrozenDict[str, Any]
     actor_traces: core.FrozenDict[str, Any]
+    actor_v: core.FrozenDict[str, Any]
     actor_carry: Array
     critic_params: core.FrozenDict[str, Any]
     critic_traces: core.FrozenDict[str, Any]
+    critic_v: core.FrozenDict[str, Any]
     critic_carry: Array
 
 
@@ -159,21 +164,57 @@ class StreamAC:
         )
         return state, transition
 
-    def _obgd_update(self, traces: PyTree, td_error: Array, lr: float, kappa: float):
-        z_leaves = jax.tree.leaves(traces)
-        z_sum = sum(
-            jnp.sum(jnp.abs(z), axis=tuple(range(1, z.ndim))) for z in z_leaves
+    def _obgd_update(self, traces: PyTree, v: PyTree, td_error: Array, lr: float, kappa: float, step: int):
+        beta2 = self.cfg.beta2
+        eps = self.cfg.eps
+
+        def _broadcast_delta(td_error, z):
+            n_trailing = z.ndim - 1
+            return td_error[(slice(None),) + (None,) * n_trailing]
+
+        # Update second moment: v <- beta2*v + (1-beta2)*(delta*z)^2
+        new_v = jax.tree.map(
+            lambda vi, z: beta2 * vi + (1 - beta2) * jnp.square(_broadcast_delta(td_error, z) * z),
+            v, traces,
         )
+
+        if self.cfg.adaptive:
+            # Bias-corrected v_hat = v / (1 - beta2^t)
+            v_hat = jax.tree.map(lambda vi: vi / (1.0 - beta2 ** step), new_v)
+
+            # z_sum over normalised traces: sum|z / sqrt(v_hat + eps)|
+            norm_leaves = jax.tree.leaves(jax.tree.map(
+                lambda z, vh: jnp.abs(z) / (jnp.sqrt(vh) + eps), traces, v_hat,
+            ))
+            z_sum = sum(
+                jnp.sum(z, axis=tuple(range(1, z.ndim))) for z in norm_leaves
+            )
+        else:
+            v_hat = None
+            z_leaves = jax.tree.leaves(traces)
+            z_sum = sum(
+                jnp.sum(jnp.abs(z), axis=tuple(range(1, z.ndim))) for z in z_leaves
+            )
+
         delta_bar = jnp.maximum(jnp.abs(td_error), 1.0)
         step_size = lr / jnp.maximum(1.0, delta_bar * z_sum * lr * kappa)
 
-        def compute_update(z: Array):
-            n_trailing = z.ndim - 1
-            ss = step_size[(slice(None),) + (None,) * n_trailing]
-            delta = td_error[(slice(None),) + (None,) * n_trailing]
-            return (ss * delta * z).mean(axis=0)
+        if self.cfg.adaptive:
+            def compute_update(z: Array, vh: Array):
+                n_trailing = z.ndim - 1
+                ss = step_size[(slice(None),) + (None,) * n_trailing]
+                delta = td_error[(slice(None),) + (None,) * n_trailing]
+                return (ss * delta * z / (jnp.sqrt(vh) + eps)).mean(axis=0)
+            updates = jax.tree.map(compute_update, traces, v_hat)
+        else:
+            def compute_update(z: Array):
+                n_trailing = z.ndim - 1
+                ss = step_size[(slice(None),) + (None,) * n_trailing]
+                delta = td_error[(slice(None),) + (None,) * n_trailing]
+                return (ss * delta * z).mean(axis=0)
+            updates = jax.tree.map(compute_update, traces)
 
-        return jax.tree.map(compute_update, traces)
+        return updates, new_v
 
     def _update_step(self, state: StreamACState, key: Key) -> tuple[StreamACState, None]:
         action_key, step_key, actor_torso_key, critic_torso_key = jax.random.split(key, 4)
@@ -270,8 +311,10 @@ class StreamAC:
         critic_traces = jax.tree.map(update_trace, state.critic_traces, critic_grads)
         actor_traces = jax.tree.map(update_trace, state.actor_traces, actor_grads)
 
-        critic_updates = self._obgd_update(critic_traces, td_error, self.cfg.critic_lr, self.cfg.critic_kappa)
-        actor_updates = self._obgd_update(actor_traces, td_error, self.cfg.actor_lr, self.cfg.actor_kappa)
+        current_step = state.update_step + 1
+
+        critic_updates, critic_v = self._obgd_update(critic_traces, state.critic_v, td_error, self.cfg.critic_lr, self.cfg.critic_kappa, current_step)
+        actor_updates, actor_v = self._obgd_update(actor_traces, state.actor_v, td_error, self.cfg.actor_lr, self.cfg.actor_kappa, current_step)
 
         critic_params = jax.tree.map(lambda p, u: p + u, state.critic_params, critic_updates)
         actor_params = jax.tree.map(lambda p, u: p + u, state.actor_params, actor_updates)
@@ -304,6 +347,7 @@ class StreamAC:
 
         state = state.replace(
             step=state.step + self.cfg.num_envs,
+            update_step=current_step,
             timestep=Timestep(
                 obs=next_obs,
                 action=action,
@@ -313,13 +357,15 @@ class StreamAC:
             env_state=env_state,
             actor_params=actor_params,
             actor_traces=actor_traces,
+            actor_v=actor_v,
             actor_carry=actor_carry,
             critic_params=critic_params,
             critic_traces=critic_traces,
+            critic_v=critic_v,
             critic_carry=critic_carry,
         )
 
-        return state.replace(update_step=state.update_step + 1), None
+        return state, None
 
     def init(self, key: Key) -> StreamACState:
         (
@@ -379,6 +425,8 @@ class StreamAC:
         critic_traces = jax.tree.map(
             lambda p: jnp.zeros((self.cfg.num_envs, *p.shape)), critic_params
         )
+        actor_v = jax.tree.map(jnp.zeros_like, actor_traces)
+        critic_v = jax.tree.map(jnp.zeros_like, critic_traces)
 
         return StreamACState(
             step=0,
@@ -387,9 +435,11 @@ class StreamAC:
             env_state=env_state,
             actor_params=actor_params,
             actor_traces=actor_traces,
+            actor_v=actor_v,
             actor_carry=actor_carry,
             critic_params=critic_params,
             critic_traces=critic_traces,
+            critic_v=critic_v,
             critic_carry=critic_carry,
         )
 
