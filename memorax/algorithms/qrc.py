@@ -93,7 +93,8 @@ class QRC:
         epsilon = self.epsilon_schedule(state.step)
         random_action = jax.random.uniform(sample_key, greedy_action.shape) < epsilon
         action = jnp.where(random_action, sampled_action, greedy_action)
-        return state, action, random_action, intermediates
+        non_greedy = action != greedy_action
+        return state, action, non_greedy, intermediates
 
     def _update(
         self,
@@ -103,7 +104,7 @@ class QRC:
         next_obs: Array,
         reward: Array,
         done: Array,
-        random_action: Array,
+        non_greedy: Array,
         q_carry: Carry,
         h_carry: Carry,
     ) -> QRCState:
@@ -213,7 +214,7 @@ class QRC:
         q_params = optax.apply_updates(state.q_params, q_param_updates)
         h_params = optax.apply_updates(state.h_params, h_param_updates)
 
-        reset = done | random_action
+        reset = done | non_greedy
 
         def reset_trace(trace):
             return jnp.where(
@@ -231,13 +232,11 @@ class QRC:
             {
                 "q_network/q_value": q_value.mean(),
                 "q_network/td_error": td_errors.mean(),
-                "q_network/h_trace": h_trace.mean(),
+                "h_network/h_trace": h_trace.mean(),
                 "q_network/gradient_norm": optax.global_norm(q_grads),
                 "h_network/correction": correction.mean(),
                 "h_network/gradient_norm": optax.global_norm(h_grads),
                 "training/epsilon": self.epsilon_schedule(state.step),
-                "training/step": state.step,
-                "training/update_step": state.update_step,
             }
         )
 
@@ -259,7 +258,7 @@ class QRC:
         q_carry = state.q_carry
         h_carry = state.h_carry
 
-        state, action, random_action, intermediates = policy(action_key, state)
+        state, action, non_greedy, intermediates = policy(action_key, state)
         intermediates = jax.tree.map(
             lambda x: jnp.mean(jnp.stack(x)),
             intermediates.get("intermediates", {}),
@@ -281,7 +280,7 @@ class QRC:
             next_obs,
             reward,
             done,
-            random_action,
+            non_greedy,
             q_carry,
             h_carry,
         )

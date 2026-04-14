@@ -537,8 +537,6 @@ class GradientPPO:
             "actor/entropy": entropy,
             "actor/approximate_kl": approximate_kl,
             "actor/clip_fraction": clip_fraction,
-            "training/step": state.step,
-            "training/update_step": state.update_step,
         })
 
         return state.replace(update_step=state.update_step + 1), None

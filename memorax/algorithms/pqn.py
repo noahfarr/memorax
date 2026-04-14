@@ -317,8 +317,6 @@ class PQN:
                 "q_network/td_error": td_error,
                 "q_network/q_value": q_value,
                 "training/epsilon": self.epsilon_schedule(state.step),
-                "training/step": state.step,
-                "training/update_step": state.update_step,
             }
         )
 

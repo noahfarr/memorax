@@ -235,8 +235,6 @@ class DQN:
                 "q_network/q_value": q_value.mean(),
                 "q_network/td_error": td_error.mean(),
                 "training/epsilon": self.epsilon_schedule(state.step),
-                "training/step": state.step,
-                "training/update_step": state.update_step,
             }
         )
 

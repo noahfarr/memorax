@@ -464,8 +464,6 @@ class PPO:
                 "actor/entropy": entropy,
                 "actor/approximate_kl": approximate_kl,
                 "actor/clip_fraction": clip_fraction,
-                "training/step": state.step,
-                "training/update_step": state.update_step,
             }
         )
 

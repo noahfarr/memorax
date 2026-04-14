@@ -23,7 +23,7 @@ dependencies = [
     "lox",
     "distrax>=0.1.5",
     "flashbax>=0.1.0",
-    "gymnax>=0.0.6",
+    "gymnax>=0.0.9",
     "wandb>=0.20.0",
     "tensorboardx>=2.6.1",
     "hydra-core",
@@ -54,7 +54,7 @@ jaxmarl   = ["jaxmarl", "brax"]
 
 environments = [
     "brax>=0.12.4",
-    "gymnax>=0.0.6",
+    "gymnax>=0.0.9",
     "jumanji>=1.1.1",
     "navix>=0.7.0",
     "craftax>=1.5.0",

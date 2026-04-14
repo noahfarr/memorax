@@ -353,7 +353,7 @@ class R2D2:
 
         state, info = self._update(update_key, state)
 
-        lox.log({**info, "training/step": state.step, "training/update_step": state.update_step})
+        lox.log(info)
 
         return state.replace(update_step=state.update_step + 1), None
 

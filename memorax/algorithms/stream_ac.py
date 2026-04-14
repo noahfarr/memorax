@@ -300,8 +300,6 @@ class StreamAC:
             "critic/td_error": td_error.mean(),
             "actor/entropy": entropy,
             "critic/value": value.mean(),
-            "training/step": state.step,
-            "training/update_step": state.update_step,
         })
 
         state = state.replace(

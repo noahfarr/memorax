@@ -27,3 +27,4 @@ from .record_episode_statistics import (
 )
 from .bsuite import BSuiteEnvState, BSuiteWrapper
 from .scale_reward import ScaleRewardWrapper
+from .sticky_action import StickyActionWrapper, StickyActionWrapperState

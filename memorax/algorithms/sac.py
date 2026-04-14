@@ -509,8 +509,6 @@ class SAC:
             state,
             gradient_keys,
         )
-        lox.log({"training/step": state.step, "training/update_step": state.update_step})
-
         return state.replace(update_step=state.update_step + 1), None
 
     def warmup(self, key: Key, state: SACState, num_steps: int) -> SACState:

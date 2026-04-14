@@ -1,11 +1,11 @@
 import time
+from dataclasses import asdict
 
 import flax.linen as nn
 import jax
 import lox
-import optax
 
-from memorax.algorithms import QRC, QRCConfig
+from memorax.algorithms import StreamAC, StreamACConfig
 from memorax.environments import environment
 from memorax.environments.wrappers import (
     NormalizeObservationWrapper,
@@ -17,13 +17,12 @@ from memorax.loggers import DashboardLogger, MultiLogger
 from memorax.networks import FeatureExtractor, Flatten, Network, heads
 from memorax.networks.initializers import sparse
 
-total_timesteps = 5_000_000
-num_epochs = 50
+total_timesteps = 10_000_000
+num_epochs = 100
 num_steps = total_timesteps // num_epochs
 seed = 0
-num_seeds = 5
-num_envs = 1
-env_id = "gymnax::Asterix-MinAtar"
+num_seeds = 1
+env_id = "gymnax::Breakout-MinAtar"
 
 env, env_params = environment.make(env_id)
 env = StickyActionWrapper(env)
@@ -33,12 +32,15 @@ env = NormalizeRewardWrapper(env)
 
 num_actions = env.action_space(env_params).n
 
-cfg = QRCConfig(
-    num_envs=num_envs,
+config = StreamACConfig(
+    num_envs=1,
+    trace_lambda=0.8,
+    actor_lr=1.0,
+    critic_lr=1.0,
+    actor_kappa=3.0,
+    critic_kappa=2.0,
+    entropy_coefficient=0.01,
     gamma=0.99,
-    lamda=0.8,
-    gradient_correction=True,
-    reg_coeff=1.0,
 )
 
 sparse_init = sparse(sparsity=0.9)
@@ -73,41 +75,24 @@ feature_extractor = FeatureExtractor(
     ),
 )
 
-
-q_network = Network(
+actor_network = Network(
     feature_extractor=feature_extractor,
-    head=heads.DiscreteQNetwork(
-        action_dim=num_actions,
-        kernel_init=sparse_init,
-    ),
+    head=heads.Categorical(action_dim=num_actions, kernel_init=sparse_init),
 )
-h_network = Network(
+
+critic_network = Network(
     feature_extractor=feature_extractor,
-    head=heads.DiscreteQNetwork(
-        action_dim=num_actions,
-        kernel_init=sparse_init,
-    ),
+    head=heads.VNetwork(kernel_init=sparse_init),
 )
 
-epsilon_schedule = optax.linear_schedule(1.0, 0.01, int(total_timesteps * 0.2))
-
-agent = QRC(
-    cfg=cfg,
-    env=env,
-    env_params=env_params,
-    q_network=q_network,
-    h_network=h_network,
-    q_optimizer=optax.sgd(1e-4),
-    h_optimizer=optax.sgd(1e-5),
-    epsilon_schedule=epsilon_schedule,
-)
+agent = StreamAC(config, env, env_params, actor_network, critic_network)
 
 logger = MultiLogger(
     [
         DashboardLogger(
             total_timesteps=total_timesteps,
             summary={
-                "Algorithm": "QRC",
+                "Algorithm": "stream-AC",
                 "Environment": env_id,
                 "Total Timesteps": f"{total_timesteps:_}",
             },
@@ -117,10 +102,8 @@ logger = MultiLogger(
 
 init = jax.vmap(agent.init)
 train = jax.vmap(lox.spool(agent.train), in_axes=(0, 0, None))
-evaluate = jax.vmap(lox.spool(agent.evaluate), in_axes=(0, 0, None))
 
 key = jax.random.key(seed)
-
 key, init_key = jax.random.split(key)
 state = init(jax.random.split(init_key, num_seeds))
 
@@ -143,15 +126,6 @@ for i in range(num_epochs):
         "training/episode_lengths": episode_lengths,
         **logs,
     }
-
-    key, eval_key = jax.random.split(key)
-    _, logs = evaluate(jax.random.split(eval_key, num_seeds), state, 10_000)
-    info = logs.pop("info")
-    episode_returns = info["returned_episode_returns"][info["returned_episode"]]
-    episode_lengths = info["returned_episode_lengths"][info["returned_episode"]]
-
-    data["evaluation/episode_returns"] = episode_returns
-    data["evaluation/episode_lengths"] = episode_lengths
     logger.log(data, step=state.step.mean().item())
 
 logger.finish()
