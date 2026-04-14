@@ -83,7 +83,7 @@ class RTUCell(RNNCellBase):
 
         pre_real = g * carry.real - phi * carry.imaginary + norm * (inputs @ self.B_real.T)
         pre_imaginary = g * carry.imaginary + phi * carry.real + norm * (inputs @ self.B_imag.T)
-        new_carry = RTUCarry(real=nn.relu(pre_real), imaginary=nn.relu(pre_imaginary))
+        new_carry = RTUCarry(real=jnp.tanh(pre_real), imaginary=jnp.tanh(pre_imaginary))
         output = jnp.concatenate([new_carry.real, new_carry.imaginary], axis=-1)
         return new_carry, output
 
@@ -124,9 +124,9 @@ class RTUCell(RNNCellBase):
         u_imaginary = inputs @ self.B_imag.T
         pre_real = g * carry.real - phi * carry.imaginary + norm * u_real
         pre_imaginary = g * carry.imaginary + phi * carry.real + norm * u_imaginary
-        d_real = (pre_real > 0).astype(carry.real.dtype)
-        d_imaginary = (pre_imaginary > 0).astype(carry.real.dtype)
-        new_carry = RTUCarry(real=nn.relu(pre_real), imaginary=nn.relu(pre_imaginary))
+        d_real = 1 - jnp.tanh(pre_real) ** 2
+        d_imaginary = 1 - jnp.tanh(pre_imaginary) ** 2
+        new_carry = RTUCarry(real=jnp.tanh(pre_real), imaginary=jnp.tanh(pre_imaginary))
         output = jnp.concatenate([new_carry.real, new_carry.imaginary], axis=-1)
 
         A = jnp.stack([jnp.stack([g, -phi]), jnp.stack([phi, g])])
