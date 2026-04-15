@@ -77,7 +77,8 @@ class DashboardLogger:
         table.add_column("Value", justify="right", width=10, style="green")
         for name, value in metrics.items():
             mean, std = jnp.mean(value), jnp.std(value)
-            value_str = f"{mean:.3f} ± {std:.3f}" if std != 0 else f"{mean:.3f}"
+            fmt = ".3e" if (0 < abs(mean) < 0.001 or abs(mean) >= 10000) else ".3f"
+            value_str = f"{mean:{fmt}} ± {std:{fmt}}" if std != 0 else f"{mean:{fmt}}"
             table.add_row(name, value_str)
         return table
 
