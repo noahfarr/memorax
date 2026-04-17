@@ -51,12 +51,13 @@ class FFN(nn.Module, Block):
 
 
 class Projection(nn.Module, Block):
-    """Single linear projection."""
+    """Single linear projection with optional activation."""
 
     features: int
     use_bias: bool = True
     kernel_init: nn.initializers.Initializer = nn.initializers.lecun_normal()
     bias_init: nn.initializers.Initializer = nn.initializers.zeros_init()
+    activation_fn: Callable | None = None
 
     @nn.compact
     def __call__(
@@ -72,6 +73,8 @@ class Projection(nn.Module, Block):
             kernel_init=self.kernel_init,
             bias_init=self.bias_init,
         )(inputs)
+        if self.activation_fn is not None:
+            x = self.activation_fn(x)
         return None, x
 
     @nn.nowrap
