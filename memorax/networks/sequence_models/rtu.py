@@ -1,4 +1,6 @@
 from functools import partial
+from typing import Callable
+
 import jax
 import jax.numpy as jnp
 from flax import linen as nn
@@ -31,6 +33,7 @@ class RTUConfig:
     eps: float = 1e-8
     dtype: Dtype | None = None
     param_dtype: Dtype = jnp.float32
+    activation_fn: Callable = struct.field(pytree_node=False, default=jnp.tanh)
 
 
 @struct.dataclass
@@ -83,7 +86,8 @@ class RTUCell(RNNCellBase):
 
         pre_real = g * carry.real - phi * carry.imaginary + norm * (inputs @ self.B_real.T)
         pre_imaginary = g * carry.imaginary + phi * carry.real + norm * (inputs @ self.B_imag.T)
-        new_carry = RTUCarry(real=jnp.tanh(pre_real), imaginary=jnp.tanh(pre_imaginary))
+        f = self.config.activation_fn
+        new_carry = RTUCarry(real=f(pre_real), imaginary=f(pre_imaginary))
         output = jnp.concatenate([new_carry.real, new_carry.imaginary], axis=-1)
         return new_carry, output
 
@@ -120,13 +124,15 @@ class RTUCell(RNNCellBase):
     ) -> tuple[RTUCarry, Array, dict[str, Array]]:
         g, phi, norm, r = self._g_phi_norm()
 
+        f = self.config.activation_fn
+
         u_real = inputs @ self.B_real.T
         u_imaginary = inputs @ self.B_imag.T
         pre_real = g * carry.real - phi * carry.imaginary + norm * u_real
         pre_imaginary = g * carry.imaginary + phi * carry.real + norm * u_imaginary
-        d_real = 1 - jnp.tanh(pre_real) ** 2
-        d_imaginary = 1 - jnp.tanh(pre_imaginary) ** 2
-        new_carry = RTUCarry(real=jnp.tanh(pre_real), imaginary=jnp.tanh(pre_imaginary))
+        d_real = jax.grad(lambda x: f(x).sum())(pre_real)
+        d_imaginary = jax.grad(lambda x: f(x).sum())(pre_imaginary)
+        new_carry = RTUCarry(real=f(pre_real), imaginary=f(pre_imaginary))
         output = jnp.concatenate([new_carry.real, new_carry.imaginary], axis=-1)
 
         A = jnp.stack([jnp.stack([g, -phi]), jnp.stack([phi, g])])
