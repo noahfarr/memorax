@@ -3,13 +3,14 @@ from dataclasses import asdict
 
 import flax.linen as nn
 import jax
+import jax.numpy as jnp
 import lox
 import optax
 
 from memorax.algorithms import PPO, PPOConfig
 from memorax.environments import environment
 from memorax.environments.wrappers import RecordEpisodeStatistics
-from memorax.loggers import DashboardLogger, MultiLogger
+from memorax.loggers import DashboardLogger, MultiLogger, WandbLogger
 from memorax.networks import RNN, FeatureExtractor, Network, Stack, heads
 from memorax.networks.blocks.ffn import Projection
 
@@ -28,6 +29,7 @@ num_actions = env.action_space(env_params).n
 cfg = PPOConfig(
     num_envs=256,
     num_steps=32,
+    gamma=0.99,
     gae_lambda=0.95,
     num_minibatches=4,
     update_epochs=4,
@@ -83,7 +85,15 @@ logger = MultiLogger(
         DashboardLogger(
             total_timesteps=total_timesteps,
             summary={"Algorithm": "PPO", "Environment": env_id, "Torso": "GRU", "Total Timesteps": f"{total_timesteps:_}"},
-        )
+        ),
+        WandbLogger(
+            project="memorax",
+            name="ppo_pobax",
+            mode="offline",
+            cfg=asdict(cfg),
+            seed=seed,
+            num_seeds=num_seeds,
+        ),
     ]
 )
 
@@ -104,8 +114,10 @@ for i in range(num_epochs):
     SPS = int(num_steps / (end - start))
 
     info = logs.pop("info")
-    episode_returns = info["returned_episode_returns"][info["returned_episode"]]
-    episode_lengths = info["returned_episode_lengths"][info["returned_episode"]]
+    mask = info["returned_episode"]
+    axes = tuple(range(1, mask.ndim))
+    episode_returns = jnp.mean(info["returned_episode_returns"], axis=axes, where=mask)
+    episode_lengths = jnp.mean(info["returned_episode_lengths"], axis=axes, where=mask)
 
     data = {
         "training/SPS": SPS,
@@ -113,6 +125,6 @@ for i in range(num_epochs):
         "training/episode_lengths": episode_lengths,
         **logs,
     }
-    logger.log(data, step=state.step.mean().item())
+    logger.log(data, step=state.step.mean(dtype=jnp.int32).item())
 
 logger.finish()

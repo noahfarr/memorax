@@ -1,8 +1,10 @@
 import time
+from dataclasses import asdict
 from functools import partial
 
 import flax.linen as nn
 import jax
+import jax.numpy as jnp
 import lox
 import optax
 from flashbax import make_item_buffer
@@ -10,7 +12,7 @@ from flashbax import make_item_buffer
 from memorax.algorithms import DQN, DQNConfig
 from memorax.environments.ale import make
 from memorax.environments.wrappers import RecordEpisodeStatistics
-from memorax.loggers import DashboardLogger, MultiLogger
+from memorax.loggers import DashboardLogger, MultiLogger, WandbLogger
 from memorax.networks import RNN, FeatureExtractor, Flatten, Network, Residual, Stack, heads
 from memorax.networks.blocks.ffn import Projection
 
@@ -88,7 +90,15 @@ logger = MultiLogger(
                 "Torso": "GRU",
                 "Total Timesteps": f"{total_timesteps:_}",
             },
-        )
+        ),
+        WandbLogger(
+            project="memorax",
+            name="dqn_ale",
+            mode="offline",
+            cfg=asdict(cfg),
+            seed=seed,
+            num_seeds=1,
+        ),
     ]
 )
 
@@ -113,8 +123,9 @@ for i in range(num_epochs):
     SPS = int(num_steps / (end - start))
 
     info = logs.pop("info")
-    episode_returns = info["returned_episode_returns"][info["returned_episode"]]
-    episode_lengths = info["returned_episode_lengths"][info["returned_episode"]]
+    mask = info["returned_episode"]
+    episode_returns = jnp.mean(info["returned_episode_returns"], where=mask)
+    episode_lengths = jnp.mean(info["returned_episode_lengths"], where=mask)
 
     data = {
         "training/SPS": SPS,

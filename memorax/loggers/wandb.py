@@ -33,7 +33,10 @@ class WandbLogger:
 
     def log(self, data: PyTree, step: int, **kwargs) -> None:
         num_seeds = len(self.runs)
-        data = jax.tree.map(lambda v: ensure_axis(v, num_seeds), data)
+        data = {
+            "/".join(str(p.key) for p in path): ensure_axis(leaf, num_seeds)
+            for path, leaf in jax.tree_util.tree_leaves_with_path(data)
+        }
         for seed, run in self.runs.items():
             run.log({k: v[seed] for k, v in data.items()}, step=step)
 
