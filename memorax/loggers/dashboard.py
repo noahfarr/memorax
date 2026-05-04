@@ -106,7 +106,8 @@ class DashboardLogger:
         right.add_column("Value", justify="right", width=8, style="white")
         for i, (key, value) in enumerate(items):
             table = left if i % 2 == 0 else right
-            table.add_row(key, f"{value}", style="white")
+            value_str = f"{value:_}" if isinstance(value, int) else f"{value}"
+            table.add_row(key, value_str, style="white")
         summary_row = Table(box=None, expand=True, pad_edge=False)
         summary_row.add_row(left, right)
         dashboard.add_row(summary_row)
