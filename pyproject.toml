@@ -39,6 +39,7 @@ brax      = ["brax>=0.12.4"]
 jumanji   = ["jumanji>=1.1.1"]
 navix     = ["navix>=0.7.0"]
 craftax   = ["craftax>=1.5.0"]
+popgym    = ["popgym", "gymnasium"]
 popgym-arcade    = ["popgym-arcade>=0.0.4"]
 mujoco-playground = ["playground>=0.0.5", "warp-lang>=1.9.1"]
 grimax    = ["grimax"]
@@ -58,6 +59,7 @@ environments = [
     "jumanji>=1.1.1",
     "navix>=0.7.0",
     "craftax>=1.5.0",
+    "popgym",
     "popgym-arcade>=0.0.4",
     "warp-lang>=1.9.1",
     "playground>=0.0.5",

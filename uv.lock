@@ -1686,6 +1686,7 @@ environments = [
     { name = "navix" },
     { name = "playground" },
     { name = "pobax" },
+    { name = "popgym" },
     { name = "popgym-arcade" },
     { name = "popjym" },
     { name = "warp-lang" },
@@ -1716,6 +1717,10 @@ navix = [
 ]
 pobax = [
     { name = "pobax" },
+]
+popgym = [
+    { name = "gymnasium" },
+    { name = "popgym" },
 ]
 popgym-arcade = [
     { name = "popgym-arcade" },
@@ -1762,6 +1767,7 @@ requires-dist = [
     { name = "gxm", marker = "extra == 'environments'" },
     { name = "gxm", marker = "extra == 'gxm'", git = "https://github.com/huterguier/gxm?rev=dev" },
     { name = "gymnasium", marker = "extra == 'gymnasium'" },
+    { name = "gymnasium", marker = "extra == 'popgym'" },
     { name = "gymnax", specifier = ">=0.0.9" },
     { name = "gymnax", marker = "extra == 'environments'", specifier = ">=0.0.9" },
     { name = "hydra-core" },
@@ -1778,6 +1784,8 @@ requires-dist = [
     { name = "playground", marker = "extra == 'mujoco-playground'", specifier = ">=0.0.5" },
     { name = "pobax", marker = "extra == 'environments'", git = "https://github.com/taodav/pobax" },
     { name = "pobax", marker = "extra == 'pobax'", git = "https://github.com/taodav/pobax" },
+    { name = "popgym", marker = "extra == 'environments'" },
+    { name = "popgym", marker = "extra == 'popgym'" },
     { name = "popgym-arcade", marker = "extra == 'environments'", specifier = ">=0.0.4" },
     { name = "popgym-arcade", marker = "extra == 'popgym-arcade'", specifier = ">=0.0.4" },
     { name = "popjym", marker = "extra == 'environments'" },
@@ -1790,7 +1798,7 @@ requires-dist = [
     { name = "xminigrid", marker = "extra == 'environments'" },
     { name = "xminigrid", marker = "extra == 'xminigrid'" },
 ]
-provides-extras = ["brax", "jumanji", "navix", "craftax", "popgym-arcade", "mujoco-playground", "grimax", "cogames", "gymnasium", "ale", "pufferlib", "gxm", "pobax", "popjym", "xminigrid", "jaxmarl", "environments"]
+provides-extras = ["brax", "jumanji", "navix", "craftax", "popgym", "popgym-arcade", "mujoco-playground", "grimax", "cogames", "gymnasium", "ale", "pufferlib", "gxm", "pobax", "popjym", "xminigrid", "jaxmarl", "environments"]
 
 [package.metadata.requires-dev]
 development = [
@@ -2531,6 +2539,19 @@ dependencies = [
     { name = "seaborn" },
     { name = "tqdm" },
     { name = "typed-argument-parser" },
+]
+
+[[package]]
+name = "popgym"
+version = "1.0.6"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "gymnasium" },
+    { name = "numpy" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/d7/00/5622284465ca906e457dcdf5aaec4b7d814d44bf339e4e0c90a700afe14d/popgym-1.0.6.tar.gz", hash = "sha256:87aeb14c3294780160c2b62572ebcc76b8f33b3a82c72fc4ce2aec0801f7ce2c", size = 72287, upload-time = "2024-04-03T09:10:53.087Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/47/b0/41fce7d8938e2a6514c55bb016390fddcf15466743675cb4f42f38031f6a/popgym-1.0.6-py3-none-any.whl", hash = "sha256:cb9f98f7424aefb78e88249f8ebb429fbc8d37de3d9810a5fa9d6b1ec9245c35", size = 104295, upload-time = "2024-04-03T09:10:51.198Z" },
 ]
 
 [[package]]
