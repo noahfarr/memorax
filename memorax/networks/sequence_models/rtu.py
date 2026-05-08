@@ -3,6 +3,7 @@ from typing import Callable
 
 import jax
 import jax.numpy as jnp
+import lox
 from flax import linen as nn
 from flax import struct
 from flax.typing import Dtype
@@ -82,7 +83,18 @@ class RTUCell(RNNCellBase):
 
     @nn.compact
     def __call__(self, carry: RTUCarry, inputs: Array) -> tuple[RTUCarry, Array]:
-        g, phi, norm, _ = self._g_phi_norm()
+        g, phi, norm, r = self._g_phi_norm()
+
+        theta = jnp.exp(self.theta_log)
+        tau = jnp.exp(-self.nu_log)
+        lox.log({
+            "rtu/r": r.mean(),
+            "rtu/r_min": r.min(),
+            "rtu/r_max": r.max(),
+            "rtu/tau": tau.mean(),
+            "rtu/theta": theta.mean(),
+            "rtu/theta_std": theta.std(),
+        })
 
         pre_real = g * carry.real - phi * carry.imaginary + norm * (inputs @ self.B_real.T)
         pre_imaginary = g * carry.imaginary + phi * carry.real + norm * (inputs @ self.B_imag.T)

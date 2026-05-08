@@ -36,6 +36,14 @@ def remove_feature_axis(x: Array) -> Array:
     return x.squeeze(-1)
 
 
+def add_batch_axis(x: Array) -> Array:
+    return x[None]
+
+
+def remove_batch_axis(x: Array) -> Array:
+    return x[0]
+
+
 def get_time_axis(inputs: Array, num_feature_axes: int = 1) -> int:
     time_axis = inputs.ndim - (num_feature_axes + 1)
     if time_axis < 0:
@@ -49,7 +57,9 @@ def get_input_shape(inputs: Array, num_feature_axes: int = 1) -> tuple:
     return input_shape
 
 
-def get_time_axis_and_input_shape(inputs: Array, num_feature_axes: int = 1) -> tuple[int, tuple]:
+def get_time_axis_and_input_shape(
+    inputs: Array, num_feature_axes: int = 1
+) -> tuple[int, tuple]:
     time_axis = get_time_axis(inputs, num_feature_axes)
     input_shape = get_input_shape(inputs, num_feature_axes)
     return time_axis, input_shape
