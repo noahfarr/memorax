@@ -10,12 +10,16 @@ import optax
 from flax import core, struct
 
 from memorax.utils import Timestep, Transition
-from memorax.utils.axes import (
-    add_time_axis,
-    remove_feature_axis,
-    remove_time_axis,
+from memorax.utils.axes import add_time_axis, remove_feature_axis, remove_time_axis
+from memorax.utils.typing import (
+    Array,
+    Carry,
+    Environment,
+    EnvParams,
+    EnvState,
+    Key,
+    PyTree,
 )
-from memorax.utils.typing import Array, Environment, EnvParams, EnvState, Key, Carry, PyTree
 
 to_sequence = lambda timestep: jax.tree.map(
     lambda x: jax.vmap(add_time_axis)(x), timestep
@@ -70,12 +74,12 @@ class MAPPO:
     critic_optimizer: optax.GradientTransformation
 
     def __post_init__(self):
-        assert self.cfg.update_epochs >= 1, (
-            f"update_epochs ({self.cfg.update_epochs}) must be >= 1"
-        )
-        assert self.cfg.batch_size % self.cfg.num_minibatches == 0, (
-            f"num_envs * num_steps ({self.cfg.batch_size}) must be divisible by num_minibatches ({self.cfg.num_minibatches})"
-        )
+        assert (
+            self.cfg.update_epochs >= 1
+        ), f"update_epochs ({self.cfg.update_epochs}) must be >= 1"
+        assert (
+            self.cfg.batch_size % self.cfg.num_minibatches == 0
+        ), f"num_envs * num_steps ({self.cfg.batch_size}) must be divisible by num_minibatches ({self.cfg.num_minibatches})"
 
     def _deterministic_action(
         self, key: Key, state: MAPPOState
@@ -83,7 +87,8 @@ class MAPPO:
         ts = to_sequence(state.timestep)
         (actor_carry, (probs, _)), intermediates = self.actor_network.apply(
             state.actor_params,
-            *ts, ts.done,
+            *ts,
+            ts.done,
             state.actor_carry,
             mutable=["intermediates"],
         )
@@ -104,7 +109,8 @@ class MAPPO:
         ts = to_sequence(state.timestep)
         (actor_carry, (probs, _)), intermediates = self.actor_network.apply(
             state.actor_params,
-            *ts, ts.done,
+            *ts,
+            ts.done,
             state.actor_carry,
             rngs={"torso": actor_torso_key},
             mutable=["intermediates"],
@@ -117,7 +123,8 @@ class MAPPO:
 
         critic_carry, (value, _) = self.critic_network.apply(
             state.critic_params,
-            *ts, ts.done,
+            *ts,
+            ts.done,
             state.critic_carry,
             rngs={"torso": critic_torso_key},
         )
@@ -204,7 +211,11 @@ class MAPPO:
         return state, transition
 
     def _update_actor(
-        self, key: Key, state: MAPPOState, initial_actor_carry: Carry, transitions: Transition
+        self,
+        key: Key,
+        state: MAPPOState,
+        initial_actor_carry: Carry,
+        transitions: Transition,
     ) -> tuple[MAPPOState, Array, tuple[Array, Array, Array]]:
         torso_key, dropout_key = jax.random.split(key)
 
@@ -215,7 +226,8 @@ class MAPPO:
 
             initial_actor_carry, (_, _) = self.actor_network.apply(
                 jax.lax.stop_gradient(state.actor_params),
-                *burn_in.first, burn_in.first.done,
+                *burn_in.first,
+                burn_in.first.done,
                 initial_actor_carry,
             )
             initial_actor_carry = jax.lax.stop_gradient(initial_actor_carry)
@@ -228,7 +240,8 @@ class MAPPO:
         def actor_loss_fn(params: PyTree):
             _, (probs, _) = self.actor_network.apply(
                 params,
-                *transitions.first, transitions.first.done,
+                *transitions.first,
+                transitions.first.done,
                 initial_actor_carry,
                 rngs={"torso": torso_key, "dropout": dropout_key},
             )
@@ -272,7 +285,11 @@ class MAPPO:
         return state, actor_loss.mean(), aux
 
     def _update_critic(
-        self, key: Key, state: MAPPOState, initial_critic_carry: Carry, transitions: Transition
+        self,
+        key: Key,
+        state: MAPPOState,
+        initial_critic_carry: Carry,
+        transitions: Transition,
     ) -> tuple[MAPPOState, Array]:
         torso_key, dropout_key = jax.random.split(key)
 
@@ -283,7 +300,8 @@ class MAPPO:
 
             initial_critic_carry, (_, _) = self.critic_network.apply(
                 jax.lax.stop_gradient(state.critic_params),
-                *burn_in.first, burn_in.first.done,
+                *burn_in.first,
+                burn_in.first.done,
                 initial_critic_carry,
             )
             initial_critic_carry = jax.lax.stop_gradient(initial_critic_carry)
@@ -296,7 +314,8 @@ class MAPPO:
         def critic_loss_fn(params: PyTree):
             _, (values, aux) = self.critic_network.apply(
                 params,
-                *transitions.first, transitions.first.done,
+                *transitions.first,
+                transitions.first.done,
                 initial_critic_carry,
                 rngs={"torso": torso_key, "dropout": dropout_key},
             )
@@ -319,11 +338,17 @@ class MAPPO:
 
             return critic_loss, values
 
-        (critic_loss, values), critic_grads = jax.value_and_grad(critic_loss_fn, has_aux=True)(
-            state.critic_params
-        )
+        (critic_loss, values), critic_grads = jax.value_and_grad(
+            critic_loss_fn, has_aux=True
+        )(state.critic_params)
         explained_variance = 1 - jnp.var(returns - values) / jnp.var(returns)
-        lox.log({"critic/gradient_norm": optax.global_norm(critic_grads), "critic/explained_variance": explained_variance, "critic/value": values.mean()})
+        lox.log(
+            {
+                "critic/gradient_norm": optax.global_norm(critic_grads),
+                "critic/explained_variance": explained_variance,
+                "critic/value": values.mean(),
+            }
+        )
         critic_updates, critic_optimizer_state = self.critic_optimizer.update(
             critic_grads, state.critic_optimizer_state, state.critic_params
         )
@@ -452,7 +477,8 @@ class MAPPO:
         ts = to_sequence(state.timestep)
         _, (value, _) = self.critic_network.apply(
             state.critic_params,
-            *ts, ts.done,
+            *ts,
+            ts.done,
             state.critic_carry,
         )
         value = jax.vmap(remove_time_axis)(value)
@@ -470,7 +496,9 @@ class MAPPO:
         if self.cfg.normalize_advantage:
             advantages = (advantages - advantages.mean()) / (advantages.std() + 1e-8)
 
-        transitions = transitions.replace(aux={**transitions.aux, "advantages": advantages, "returns": returns})
+        transitions = transitions.replace(
+            aux={**transitions.aux, "advantages": advantages, "returns": returns}
+        )
 
         transitions = jax.tree.map(
             lambda x: jnp.moveaxis(x, 0, min(2, x.ndim - 1)), transitions
@@ -543,7 +571,8 @@ class MAPPO:
                 "torso": actor_torso_key,
                 "dropout": actor_dropout_key,
             },
-            *timestep, timestep.done,
+            *timestep,
+            timestep.done,
             actor_carry,
         )
 
@@ -556,7 +585,8 @@ class MAPPO:
                 "torso": critic_torso_key,
                 "dropout": critic_dropout_key,
             },
-            *timestep, timestep.done,
+            *timestep,
+            timestep.done,
             critic_carry,
         )
 
@@ -573,14 +603,13 @@ class MAPPO:
             critic_carry=critic_carry,
         )
 
-    def warmup(
-        self, key: Key, state: MAPPOState, num_steps: int
-    ) -> MAPPOState:
+    def warmup(self, key: Key, state: MAPPOState, num_steps: int) -> MAPPOState:
         return state
 
     def train(self, key: Key, state: MAPPOState, num_steps: int) -> MAPPOState:
-        num_outer_steps = num_steps // (self.cfg.num_envs * self.cfg.num_steps)
-        keys = jax.random.split(key, num_outer_steps)
+        keys = jax.random.split(
+            key, num_steps // (self.cfg.num_steps * self.cfg.num_envs)
+        )
         state, _ = jax.lax.scan(
             self._update_step,
             state,

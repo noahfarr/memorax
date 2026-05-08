@@ -68,15 +68,15 @@ class SAC:
     buffer: Buffer
 
     def __post_init__(self):
-        assert self.cfg.train_frequency >= self.cfg.num_envs, (
-            f"train_frequency ({self.cfg.train_frequency}) must be >= num_envs ({self.cfg.num_envs})"
-        )
-        assert self.cfg.train_frequency % self.cfg.num_envs == 0, (
-            f"train_frequency ({self.cfg.train_frequency}) must be divisible by num_envs ({self.cfg.num_envs})"
-        )
-        assert self.cfg.gradient_steps >= 1, (
-            f"gradient_steps ({self.cfg.gradient_steps}) must be >= 1"
-        )
+        assert (
+            self.cfg.train_frequency >= self.cfg.num_envs
+        ), f"train_frequency ({self.cfg.train_frequency}) must be >= num_envs ({self.cfg.num_envs})"
+        assert (
+            self.cfg.train_frequency % self.cfg.num_envs == 0
+        ), f"train_frequency ({self.cfg.train_frequency}) must be divisible by num_envs ({self.cfg.num_envs})"
+        assert (
+            self.cfg.gradient_steps >= 1
+        ), f"gradient_steps ({self.cfg.gradient_steps}) must be >= 1"
 
     def _deterministic_action(self, key: Key, state: SACState):
         sample_key = key
@@ -210,13 +210,9 @@ class SAC:
         ).to_sequence()
 
         actor_carry = self.actor_network.initialize_carry((self.cfg.num_envs, None))
-        ts_obs, ts_done, ts_action, ts_reward = timestep
         actor_params = self.actor_network.init(
             {"params": actor_key, "torso": actor_torso_key},
-            observation=ts_obs,
-            done=ts_done,
-            action=ts_action,
-            reward=ts_reward,
+            *timestep,
             initial_carry=actor_carry,
         )
         actor_optimizer_state = self.actor_optimizer.init(actor_params)
@@ -224,10 +220,7 @@ class SAC:
         critic_carry = self.critic_network.initialize_carry((self.cfg.num_envs, None))
         critic_params = self.critic_network.init(
             {"params": critic_key, "torso": critic_torso_key},
-            observation=ts_obs,
-            done=ts_done,
-            action=ts_action,
-            reward=ts_reward,
+            *timestep,
             initial_carry=critic_carry,
         )
         critic_target_params = critic_params
@@ -290,14 +283,16 @@ class SAC:
             alpha_loss = (alpha * (-log_probs - target_entropy)).mean()
             return alpha_loss, (alpha, alpha_loss)
 
-        (_, (alpha, alpha_loss)), grads = jax.value_and_grad(alpha_loss_fn, has_aux=True)(
-            state.alpha_params
+        (_, (alpha, alpha_loss)), grads = jax.value_and_grad(
+            alpha_loss_fn, has_aux=True
+        )(state.alpha_params)
+        lox.log(
+            {
+                "alpha/loss": alpha_loss,
+                "alpha/value": alpha,
+                "alpha/gradient_norm": optax.global_norm(grads),
+            }
         )
-        lox.log({
-            "alpha/loss": alpha_loss,
-            "alpha/value": alpha,
-            "alpha/gradient_norm": optax.global_norm(grads),
-        })
         updates, optimizer_state = self.alpha_optimizer.update(
             grads, state.alpha_optimizer_state, state.alpha_params
         )
@@ -344,14 +339,16 @@ class SAC:
             actor_loss = (log_probs * alpha - q).mean()
             return actor_loss, (carry, actor_loss, log_probs)
 
-        (_, (carry, actor_loss, log_probs)), grads = jax.value_and_grad(actor_loss_fn, has_aux=True)(
-            state.actor_params
+        (_, (carry, actor_loss, log_probs)), grads = jax.value_and_grad(
+            actor_loss_fn, has_aux=True
+        )(state.actor_params)
+        lox.log(
+            {
+                "actor/loss": actor_loss,
+                "actor/entropy": -log_probs.mean(),
+                "actor/gradient_norm": optax.global_norm(grads),
+            }
         )
-        lox.log({
-            "actor/loss": actor_loss,
-            "actor/entropy": -log_probs.mean(),
-            "actor/gradient_norm": optax.global_norm(grads),
-        })
         updates, actor_optimizer_state = self.actor_optimizer.update(
             grads, state.actor_optimizer_state, state.actor_params
         )
@@ -426,15 +423,17 @@ class SAC:
 
             return critic_loss, (critic_loss, q1, q2)
 
-        (_, (critic_loss, q1, q2)), grads = jax.value_and_grad(critic_loss_fn, has_aux=True)(
-            state.critic_params
+        (_, (critic_loss, q1, q2)), grads = jax.value_and_grad(
+            critic_loss_fn, has_aux=True
+        )(state.critic_params)
+        lox.log(
+            {
+                "critic/loss": critic_loss,
+                "critic/q1": q1.mean(),
+                "critic/q2": q2.mean(),
+                "critic/gradient_norm": optax.global_norm(grads),
+            }
         )
-        lox.log({
-            "critic/loss": critic_loss,
-            "critic/q1": q1.mean(),
-            "critic/q2": q2.mean(),
-            "critic/gradient_norm": optax.global_norm(grads),
-        })
         updates, critic_optimizer_state = self.critic_optimizer.update(
             grads, state.critic_optimizer_state, state.critic_params
         )
@@ -467,10 +466,28 @@ class SAC:
         if experience.carry is not None:
             initial_actor_carry = jax.tree.map(lambda x: x[:, 0], experience.carry)
 
-        initial_actor_carry = utils.burn_in(self.actor_network, state.actor_params, experience.first, initial_actor_carry, self.cfg.burn_in_length)
-        initial_critic_carry = utils.burn_in(self.critic_network, state.critic_params, experience.first, initial_critic_carry, self.cfg.burn_in_length)
-        initial_target_critic_carry = utils.burn_in(self.critic_network, state.critic_target_params, experience.second, initial_target_critic_carry, self.cfg.burn_in_length)
-        experience = jax.tree.map(lambda x: x[:, self.cfg.burn_in_length:], experience)
+        initial_actor_carry = utils.burn_in(
+            self.actor_network,
+            state.actor_params,
+            experience.first,
+            initial_actor_carry,
+            self.cfg.burn_in_length,
+        )
+        initial_critic_carry = utils.burn_in(
+            self.critic_network,
+            state.critic_params,
+            experience.first,
+            initial_critic_carry,
+            self.cfg.burn_in_length,
+        )
+        initial_target_critic_carry = utils.burn_in(
+            self.critic_network,
+            state.critic_target_params,
+            experience.second,
+            initial_target_critic_carry,
+            self.cfg.burn_in_length,
+        )
+        experience = jax.tree.map(lambda x: x[:, self.cfg.burn_in_length :], experience)
 
         state = self._update_critic(
             critic_key,
@@ -487,16 +504,16 @@ class SAC:
             initial_actor_carry,
             initial_critic_carry,
         )
-        state = self._update_alpha(
-            alpha_key, state, experience, initial_actor_carry
-        )
+        state = self._update_alpha(alpha_key, state, experience, initial_actor_carry)
 
         return state
 
     def _update_step(self, state: SACState, key: Key):
         step_key, gradient_key = jax.random.split(key)
 
-        step_keys = jax.random.split(step_key, self.cfg.train_frequency // self.cfg.num_envs)
+        step_keys = jax.random.split(
+            step_key, self.cfg.train_frequency // self.cfg.num_envs
+        )
         state, transitions = jax.lax.scan(
             partial(self._step, policy=self._stochastic_action),
             state,

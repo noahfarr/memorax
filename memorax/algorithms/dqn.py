@@ -180,9 +180,21 @@ class DQN:
             initial_carry = jax.tree.map(lambda x: x[:, 0], experience.carry)
             initial_target_carry = jax.tree.map(lambda x: x[:, 0], experience.carry)
 
-        initial_carry = utils.burn_in(self.q_network, state.params, experience.first, initial_carry, self.cfg.burn_in_length)
-        initial_target_carry = utils.burn_in(self.q_network, state.target_params, experience.second, initial_target_carry, self.cfg.burn_in_length)
-        experience = jax.tree.map(lambda x: x[:, self.cfg.burn_in_length:], experience)
+        initial_carry = utils.burn_in(
+            self.q_network,
+            state.params,
+            experience.first,
+            initial_carry,
+            self.cfg.burn_in_length,
+        )
+        initial_target_carry = utils.burn_in(
+            self.q_network,
+            state.target_params,
+            experience.second,
+            initial_target_carry,
+            self.cfg.burn_in_length,
+        )
+        experience = jax.tree.map(lambda x: x[:, self.cfg.burn_in_length :], experience)
 
         _, (next_target_q_values, _) = self.q_network.apply(
             state.target_params,
@@ -322,8 +334,7 @@ class DQN:
         state: DQNState,
         num_steps: int,
     ) -> DQNState:
-        num_outer_steps = num_steps // self.cfg.train_frequency
-        keys = jax.random.split(key, num_outer_steps)
+        keys = jax.random.split(key, num_steps // self.cfg.train_frequency)
         state, _ = jax.lax.scan(
             self._update_step,
             state,

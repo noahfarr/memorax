@@ -11,15 +11,7 @@ from flax import core, struct
 
 from memorax.utils import Timestep, Transition, utils
 from memorax.utils.axes import add_feature_axis, remove_feature_axis, remove_time_axis
-from memorax.utils.typing import (
-    Array,
-    Carry,
-    Environment,
-    EnvParams,
-    EnvState,
-    Key,
-    PyTree,
-)
+from memorax.utils.typing import Array, Environment, EnvParams, EnvState, Key, PyTree
 
 
 @struct.dataclass(frozen=True)
@@ -58,12 +50,12 @@ class PQN:
     epsilon_schedule: optax.Schedule
 
     def __post_init__(self):
-        assert self.cfg.update_epochs >= 1, (
-            f"update_epochs ({self.cfg.update_epochs}) must be >= 1"
-        )
-        assert self.cfg.batch_size % self.cfg.num_minibatches == 0, (
-            f"num_envs * num_steps ({self.cfg.batch_size}) must be divisible by num_minibatches ({self.cfg.num_minibatches})"
-        )
+        assert (
+            self.cfg.update_epochs >= 1
+        ), f"update_epochs ({self.cfg.update_epochs}) must be >= 1"
+        assert (
+            self.cfg.batch_size % self.cfg.num_minibatches == 0
+        ), f"num_envs * num_steps ({self.cfg.batch_size}) must be divisible by num_minibatches ({self.cfg.num_minibatches})"
 
     def _greedy_action(
         self, key: Key, state: PQNState
@@ -170,9 +162,7 @@ class PQN:
         )
 
         delta = lambda_return - next_q_value
-        lambda_return = (
-            target_bootstrap + self.cfg.gamma * self.cfg.td_lambda * delta
-        )
+        lambda_return = target_bootstrap + self.cfg.gamma * self.cfg.td_lambda * delta
 
         lambda_return = (
             1.0 - transition.second.done
@@ -225,8 +215,16 @@ class PQN:
 
         torso_key, dropout_key = jax.random.split(key)
 
-        carry = utils.burn_in(self.q_network, state.params, transitions.first, carry, self.cfg.burn_in_length)
-        transitions = jax.tree.map(lambda x: x[:, self.cfg.burn_in_length:], transitions)
+        carry = utils.burn_in(
+            self.q_network,
+            state.params,
+            transitions.first,
+            carry,
+            self.cfg.burn_in_length,
+        )
+        transitions = jax.tree.map(
+            lambda x: x[:, self.cfg.burn_in_length :], transitions
+        )
 
         target = transitions.aux["targets"]
 
@@ -340,13 +338,9 @@ class PQN:
         ).to_sequence()
 
         carry = self.q_network.initialize_carry((self.cfg.num_envs, None))
-        ts_obs, ts_done, ts_action, ts_reward = timestep
         params = self.q_network.init(
             {"params": q_key, "torso": torso_key},
-            observation=ts_obs,
-            done=ts_done,
-            action=ts_action,
-            reward=ts_reward,
+            *timestep,
             initial_carry=carry,
         )
         optimizer_state = self.optimizer.init(params)
@@ -370,8 +364,9 @@ class PQN:
         state: PQNState,
         num_steps: int,
     ) -> PQNState:
-        num_outer_steps = num_steps // (self.cfg.num_steps * self.cfg.num_envs)
-        keys = jax.random.split(key, num_outer_steps)
+        keys = jax.random.split(
+            key, num_steps // (self.cfg.num_steps * self.cfg.num_envs)
+        )
         state, _ = jax.lax.scan(
             self._update_step,
             state,

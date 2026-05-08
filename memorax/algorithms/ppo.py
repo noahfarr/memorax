@@ -67,12 +67,12 @@ class PPO:
     critic_optimizer: optax.GradientTransformation
 
     def __post_init__(self):
-        assert self.cfg.update_epochs >= 1, (
-            f"update_epochs ({self.cfg.update_epochs}) must be >= 1"
-        )
-        assert self.cfg.batch_size % self.cfg.num_minibatches == 0, (
-            f"num_envs * num_steps ({self.cfg.batch_size}) must be divisible by num_minibatches ({self.cfg.num_minibatches})"
-        )
+        assert (
+            self.cfg.update_epochs >= 1
+        ), f"update_epochs ({self.cfg.update_epochs}) must be >= 1"
+        assert (
+            self.cfg.batch_size % self.cfg.num_minibatches == 0
+        ), f"num_envs * num_steps ({self.cfg.batch_size}) must be divisible by num_minibatches ({self.cfg.num_minibatches})"
 
     def _deterministic_action(
         self, key: Key, state: PPOState
@@ -207,14 +207,24 @@ class PPO:
         return state, transition
 
     def _update_actor(
-        self, key: Key, state: PPOState, initial_actor_carry: Carry, transitions: Transition
+        self,
+        key: Key,
+        state: PPOState,
+        initial_actor_carry: Carry,
+        transitions: Transition,
     ) -> tuple[PPOState, Array, tuple[Array, Array, Array]]:
         torso_key, dropout_key = jax.random.split(key)
 
         initial_actor_carry = utils.burn_in(
-            self.actor_network, state.actor_params, transitions.first, initial_actor_carry, self.cfg.burn_in_length
+            self.actor_network,
+            state.actor_params,
+            transitions.first,
+            initial_actor_carry,
+            self.cfg.burn_in_length,
         )
-        transitions = jax.tree.map(lambda x: x[:, self.cfg.burn_in_length:], transitions)
+        transitions = jax.tree.map(
+            lambda x: x[:, self.cfg.burn_in_length :], transitions
+        )
 
         advantages = transitions.aux["advantages"]
 
@@ -264,14 +274,24 @@ class PPO:
         return state, actor_loss.mean(), aux
 
     def _update_critic(
-        self, key: Key, state: PPOState, initial_critic_carry: Carry, transitions: Transition
+        self,
+        key: Key,
+        state: PPOState,
+        initial_critic_carry: Carry,
+        transitions: Transition,
     ) -> tuple[PPOState, Array]:
         torso_key, dropout_key = jax.random.split(key)
 
         initial_critic_carry = utils.burn_in(
-            self.critic_network, state.critic_params, transitions.first, initial_critic_carry, self.cfg.burn_in_length
+            self.critic_network,
+            state.critic_params,
+            transitions.first,
+            initial_critic_carry,
+            self.cfg.burn_in_length,
         )
-        transitions = jax.tree.map(lambda x: x[:, self.cfg.burn_in_length:], transitions)
+        transitions = jax.tree.map(
+            lambda x: x[:, self.cfg.burn_in_length :], transitions
+        )
 
         returns = transitions.aux["returns"]
 
@@ -301,11 +321,17 @@ class PPO:
 
             return critic_loss, values
 
-        (critic_loss, values), critic_grads = jax.value_and_grad(critic_loss_fn, has_aux=True)(
-            state.critic_params
-        )
+        (critic_loss, values), critic_grads = jax.value_and_grad(
+            critic_loss_fn, has_aux=True
+        )(state.critic_params)
         explained_variance = 1 - jnp.var(returns - values) / jnp.var(returns)
-        lox.log({"critic/gradient_norm": optax.global_norm(critic_grads), "critic/explained_variance": explained_variance, "critic/value": values.mean()})
+        lox.log(
+            {
+                "critic/gradient_norm": optax.global_norm(critic_grads),
+                "critic/explained_variance": explained_variance,
+                "critic/value": values.mean(),
+            }
+        )
         critic_updates, critic_optimizer_state = self.critic_optimizer.update(
             critic_grads, state.critic_optimizer_state, state.critic_params
         )
@@ -535,8 +561,9 @@ class PPO:
         return state
 
     def train(self, key: Key, state: PPOState, num_steps: int) -> PPOState:
-        num_outer_steps = num_steps // (self.cfg.num_envs * self.cfg.num_steps)
-        keys = jax.random.split(key, num_outer_steps)
+        keys = jax.random.split(
+            key, num_steps // (self.cfg.num_steps * self.cfg.num_envs)
+        )
         state, _ = jax.lax.scan(
             self._update_step,
             state,
@@ -545,9 +572,7 @@ class PPO:
 
         return state
 
-    def evaluate(
-        self, key: Key, state: PPOState, num_steps: int
-    ) -> PPOState:
+    def evaluate(self, key: Key, state: PPOState, num_steps: int) -> PPOState:
         reset_key, eval_key = jax.random.split(key)
         reset_key = jax.random.split(reset_key, self.cfg.num_envs)
         obs, env_state = jax.vmap(self.env.reset, in_axes=(0, None))(
