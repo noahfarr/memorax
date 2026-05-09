@@ -136,12 +136,8 @@ class StreamAC:
         broadcast_dims = tuple(range(state.timestep.done.ndim, state.timestep.action.ndim))
         first = Timestep(
             obs=state.timestep.obs,
-            action=jnp.where(
-                jnp.expand_dims(state.timestep.done, axis=broadcast_dims),
-                jnp.zeros_like(state.timestep.action),
-                state.timestep.action,
-            ),
-            reward=jnp.where(state.timestep.done, 0, state.timestep.reward),
+            action=state.timestep.action,
+            reward=state.timestep.reward,
             done=state.timestep.done,
         )
         second = Timestep(obs=None, action=action, reward=reward, done=done)
@@ -152,12 +148,17 @@ class StreamAC:
             second=second,
             aux={"log_prob": log_prob, "value": value},
         )
+        next_reward = jnp.asarray(reward, dtype=jnp.float32)
         state = state.replace(
             step=state.step + self.cfg.num_envs,
             timestep=Timestep(
                 obs=next_obs,
-                action=action,
-                reward=jnp.asarray(reward, dtype=jnp.float32),
+                action=jnp.where(
+                    jnp.expand_dims(done, axis=broadcast_dims),
+                    jnp.zeros_like(action),
+                    action,
+                ),
+                reward=jnp.where(done, jnp.zeros_like(next_reward), next_reward),
                 done=done,
             ),
             env_state=env_state,
@@ -328,12 +329,8 @@ class StreamAC:
         broadcast_dims = tuple(range(state.timestep.done.ndim, state.timestep.action.ndim))
         first = Timestep(
             obs=state.timestep.obs,
-            action=jnp.where(
-                jnp.expand_dims(state.timestep.done, axis=broadcast_dims),
-                jnp.zeros_like(state.timestep.action),
-                state.timestep.action,
-            ),
-            reward=jnp.where(state.timestep.done, 0, state.timestep.reward),
+            action=state.timestep.action,
+            reward=state.timestep.reward,
             done=state.timestep.done,
         )
         second = Timestep(obs=None, action=action, reward=next_reward, done=next_done)
@@ -345,13 +342,20 @@ class StreamAC:
             "critic/value": value.mean(),
         })
 
+        next_reward_f = jnp.asarray(next_reward, dtype=jnp.float32)
         state = state.replace(
             step=state.step + self.cfg.num_envs,
             update_step=current_step,
             timestep=Timestep(
                 obs=next_obs,
-                action=action,
-                reward=jnp.asarray(next_reward, dtype=jnp.float32),
+                action=jnp.where(
+                    jnp.expand_dims(next_done, axis=broadcast_dims),
+                    jnp.zeros_like(action),
+                    action,
+                ),
+                reward=jnp.where(
+                    next_done, jnp.zeros_like(next_reward_f), next_reward_f
+                ),
                 done=next_done,
             ),
             env_state=env_state,

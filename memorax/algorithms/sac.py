@@ -146,17 +146,11 @@ class SAC:
         broadcast_dims = tuple(
             range(state.timestep.done.ndim, state.timestep.action.ndim)
         )
-        prev_action = jnp.where(
-            jnp.expand_dims(state.timestep.done, axis=broadcast_dims),
-            jnp.zeros_like(state.timestep.action),
-            state.timestep.action,
-        )
-        prev_reward = jnp.where(state.timestep.done, 0, state.timestep.reward)
 
         first = Timestep(
             obs=state.timestep.obs,
-            action=prev_action,
-            reward=prev_reward,
+            action=state.timestep.action,
+            reward=state.timestep.reward,
             done=state.timestep.done,
         )
         second = Timestep(
@@ -176,12 +170,17 @@ class SAC:
         buffer_transition = jax.tree.map(lambda x: jnp.expand_dims(x, 1), transition)
         buffer_state = self.buffer.add(state.buffer_state, buffer_transition)
 
+        next_reward = jnp.asarray(reward, dtype=jnp.float32)
         state = state.replace(
             step=state.step + self.cfg.num_envs,
             timestep=Timestep(
                 obs=next_obs,
-                action=action,
-                reward=jnp.asarray(reward, dtype=jnp.float32),
+                action=jnp.where(
+                    jnp.expand_dims(done, axis=broadcast_dims),
+                    jnp.zeros_like(action),
+                    action,
+                ),
+                reward=jnp.where(done, jnp.zeros_like(next_reward), next_reward),
                 done=done,
             ),
             env_state=env_state,

@@ -176,12 +176,8 @@ class MAPPO:
 
         first = Timestep(
             obs=state.timestep.obs,
-            action=jnp.where(
-                jnp.expand_dims(state.timestep.done, axis=broadcast_dims),
-                jnp.zeros_like(state.timestep.action),
-                state.timestep.action,
-            ),
-            reward=jnp.where(state.timestep.done, 0, state.timestep.reward),
+            action=state.timestep.action,
+            reward=state.timestep.reward,
             done=state.timestep.done,
         )
         second = Timestep(
@@ -202,8 +198,14 @@ class MAPPO:
             step=state.step + num_envs,
             timestep=Timestep(
                 obs=next_obs,
-                action=action,
-                reward=jnp.asarray(reward, dtype=jnp.float32),
+                action=jnp.where(
+                    jnp.expand_dims(done, axis=broadcast_dims),
+                    jnp.zeros_like(action),
+                    action,
+                ),
+                reward=jnp.where(
+                    done, 0, jnp.asarray(reward, dtype=jnp.float32)
+                ),
                 done=done,
             ),
             env_state=env_state,
