@@ -45,7 +45,7 @@ class TimeAwareObservationWrapper(GymnaxWrapper):
         observation, env_state, reward, done, info = self._env.step(
             key, state.env_state, action, params
         )
-        new_step = state.step + 1
+        new_step = jnp.where(done, 0, state.step + 1)
         new_state = TimeAwareObservationWrapperState(
             step=new_step, env_state=env_state
         )
