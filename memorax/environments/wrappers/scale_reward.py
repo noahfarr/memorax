@@ -1,5 +1,6 @@
 from typing import Union
 
+import lox
 from gymnax.environments import environment
 
 from memorax.utils.typing import Array, Key
@@ -19,4 +20,5 @@ class ScaleRewardWrapper(GymnaxWrapper):
         params: environment.EnvParams | None = None,
     ) -> tuple[Array, environment.EnvState, float, bool, dict]:
         obs, env_state, reward, done, info = self._env.step(key, state, action, params)
+        lox.log({"scale_reward/scale": self.scale})
         return obs, env_state, self.scale * reward, done, info

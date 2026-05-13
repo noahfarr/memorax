@@ -1,6 +1,7 @@
 from typing import Union
 
 import jax.numpy as jnp
+import lox
 from gymnax.environments import environment
 
 from memorax.utils.typing import Array, Key
@@ -20,5 +21,9 @@ class ClipActionWrapper(GymnaxWrapper):
         action: Union[int, float],
         params: environment.EnvParams | None = None,
     ) -> tuple[Array, environment.EnvState, float, bool, dict]:
+        clip_rate = jnp.mean(
+            jnp.logical_or(action < self.low, action > self.high).astype(jnp.float32)
+        )
+        lox.log({"clip_action/clip_rate": clip_rate})
         action = jnp.clip(action, self.low, self.high)
         return self._env.step(key, state, action, params)

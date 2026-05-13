@@ -2,6 +2,7 @@ from typing import Union
 
 import jax
 import jax.numpy as jnp
+import lox
 from flax import struct
 from gymnax.environments import environment
 
@@ -38,6 +39,7 @@ class StickyActionWrapper(GymnaxWrapper):
     ) -> tuple[Array, StickyActionWrapperState, float, bool, dict]:
         key, sticky_key = jax.random.split(key)
         sticky = jax.random.uniform(sticky_key) < self.sticky_action_probability
+        lox.log({"sticky_action/sticky_rate": sticky.astype(jnp.float32)})
         executed_action = jnp.where(sticky, state.previous_action, action)
         observation, env_state, reward, done, info = self._env.step(
             key, state.env_state, executed_action, params

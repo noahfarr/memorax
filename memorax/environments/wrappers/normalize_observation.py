@@ -1,6 +1,7 @@
 from typing import Union
 
 import jax.numpy as jnp
+import lox
 from flax import struct
 from gymnax.environments import environment
 
@@ -64,8 +65,15 @@ class NormalizeObservationWrapper(GymnaxWrapper):
             count=count,
             env_state=env_state,
         )
+        std = jnp.sqrt(state.M2 / state.count + self.eps)
+        lox.log(
+            {
+                "normalize_observation/mean": state.mean.mean(),
+                "normalize_observation/std": std.mean(),
+            }
+        )
         return (
-            (obs - state.mean) / jnp.sqrt(state.M2 / state.count + self.eps),
+            (obs - state.mean) / std,
             state,
             reward,
             done,

@@ -2,6 +2,7 @@ from typing import Union
 
 import jax
 import jax.numpy as jnp
+import lox
 from gymnax.environments import environment
 from gymnax.wrappers.purerl import GymnaxWrapper
 
@@ -12,6 +13,10 @@ class MaskObservationWrapper(GymnaxWrapper):
     def __init__(self, env, mask: PyTree):
         super().__init__(env)
         self.mask = mask
+        leaves = jax.tree.leaves(mask)
+        total = sum(leaf.size for leaf in leaves)
+        masked = sum((leaf == 0).sum() for leaf in leaves)
+        self.mask_rate = jnp.asarray(masked / total, dtype=jnp.float32)
 
     def reset(
         self, key: Key, params: environment.EnvParams | None = None
@@ -30,5 +35,6 @@ class MaskObservationWrapper(GymnaxWrapper):
         observation, state, reward, done, info = self._env.step(
             key, state, action, params
         )
+        lox.log({"mask_observation/mask_rate": self.mask_rate})
         observation = jax.tree.map(lambda o, m: o * m, observation, self.mask)
         return observation, state, reward, done, info

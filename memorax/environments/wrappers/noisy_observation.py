@@ -2,6 +2,7 @@ from typing import Callable, Union
 
 import jax
 import jax.numpy as jnp
+import lox
 from gymnax.environments import environment
 
 from memorax.utils.typing import Array, Key, PyTree
@@ -23,10 +24,15 @@ class NoisyObservationWrapper(GymnaxWrapper):
         leaves, treedef = jax.tree.flatten(observation)
         keys = jax.random.split(key, len(leaves))
         masks = jax.tree.leaves(self.mask)
-        noisy_leaves = [
-            leaf + self.noise_fn(k, leaf.shape) * m
+        noise_leaves = [
+            self.noise_fn(k, leaf.shape) * m
             for leaf, k, m in zip(leaves, keys, masks)
         ]
+        noise_magnitude = jnp.mean(
+            jnp.stack([jnp.mean(jnp.abs(n)) for n in noise_leaves])
+        )
+        lox.log({"noisy_observation/noise_magnitude": noise_magnitude})
+        noisy_leaves = [leaf + n for leaf, n in zip(leaves, noise_leaves)]
         return jax.tree.unflatten(treedef, noisy_leaves)
 
     def reset(

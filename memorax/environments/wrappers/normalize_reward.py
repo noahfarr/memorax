@@ -1,6 +1,7 @@
 from typing import Union
 
 import jax.numpy as jnp
+import lox
 from flax import struct
 from gymnax.environments import environment
 
@@ -54,7 +55,14 @@ class NormalizeRewardWrapper(GymnaxWrapper):
         mean = state.mean + delta / count
         delta2 = G - mean
         M2 = state.M2 + delta * delta2
-        scaled_reward = reward / jnp.sqrt(M2 / count + self.eps)
+        std = jnp.sqrt(M2 / count + self.eps)
+        scaled_reward = reward / std
+        lox.log(
+            {
+                "normalize_reward/mean": mean,
+                "normalize_reward/std": std,
+            }
+        )
 
         new_state = NormalizeRewardWrapperState(
             mean=mean,
