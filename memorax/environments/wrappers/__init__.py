@@ -32,3 +32,4 @@ from .time_aware_observation import (
     TimeAwareObservationWrapper,
     TimeAwareObservationWrapperState,
 )
+from .transform_observation import TransformObservationWrapper
