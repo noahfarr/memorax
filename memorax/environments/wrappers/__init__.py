@@ -33,3 +33,4 @@ from .time_aware_observation import (
     TimeAwareObservationWrapperState,
 )
 from .transform_observation import TransformObservationWrapper
+from .transform_reward import TransformRewardWrapper
