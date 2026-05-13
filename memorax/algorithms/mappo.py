@@ -238,6 +238,8 @@ class MAPPO:
             )
 
         advantages = transitions.aux["advantages"]
+        if self.cfg.normalize_advantage:
+            advantages = (advantages - advantages.mean()) / (advantages.std() + 1e-8)
 
         def actor_loss_fn(params: PyTree):
             _, (probs, _) = self.actor_network.apply(
@@ -494,9 +496,6 @@ class MAPPO:
             unroll=16,
         )
         returns = advantages + transitions.aux["value"]
-
-        if self.cfg.normalize_advantage:
-            advantages = (advantages - advantages.mean()) / (advantages.std() + 1e-8)
 
         transitions = transitions.replace(
             aux={**transitions.aux, "advantages": advantages, "returns": returns}
