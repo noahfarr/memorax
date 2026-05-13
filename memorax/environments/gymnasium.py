@@ -1,3 +1,4 @@
+import gymnasium.spaces as gym_spaces
 import jax
 import jax.numpy as jnp
 import numpy as np
@@ -20,9 +21,7 @@ class GymnasiumWrapper:
 
         observation_space = environment.single_observation_space
         self.observation_shape = observation_space.shape
-        self.observation_dtype = jnp.dtype(observation_space.dtype)
-
-        self.num_actions = environment.single_action_space.n
+        self.observation_dtype = jax.dtypes.canonicalize_dtype(observation_space.dtype)
 
     @property
     def default_params(self) -> None:
@@ -53,7 +52,7 @@ class GymnasiumWrapper:
     ) -> tuple[Array, GymnasiumState, Array, Array, dict]:
 
         def _step(action):
-            action = np.asarray(action, dtype=np.int32)
+            action = np.asarray(action, dtype=self._environment.single_action_space.dtype)
             observation, rewards, terminations, truncations, infos = (
                 self._environment.step(action)
             )
@@ -86,8 +85,16 @@ class GymnasiumWrapper:
             dtype=self.observation_dtype,
         )
 
-    def action_space(self, params=None) -> spaces.Discrete:
-        return spaces.Discrete(self.num_actions)
+    def action_space(self, params=None):
+        action_space = self._environment.single_action_space
+        match action_space:
+            case gym_spaces.Discrete(n=n):
+                return spaces.Discrete(int(n))
+            case gym_spaces.Box(low=low, high=high, shape=shape, dtype=dtype):
+                return spaces.Box(np.asarray(low), np.asarray(high), shape, dtype)
+        raise NotImplementedError(
+            f"Unsupported gymnasium action space: {type(action_space).__name__}"
+        )
 
 
 def make(env_id, num_envs=1, **kwargs) -> tuple:

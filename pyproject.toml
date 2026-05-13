@@ -40,12 +40,14 @@ jumanji   = ["jumanji>=1.1.1"]
 navix     = ["navix>=0.7.0"]
 craftax   = ["craftax>=1.5.0"]
 popgym    = ["popgym", "gymnasium"]
+foragax   = ["continual-foragax"]
 popgym-arcade    = ["popgym-arcade>=0.0.4"]
 mujoco-playground = ["playground>=0.0.5", "warp-lang>=1.9.1"]
 grimax    = ["grimax"]
 cogames   = ["cogames"]
 gymnasium = ["gymnasium"]
 ale       = ["ale-py[gymnasium]"]
+mujoco    = ["gymnasium[mujoco]"]
 pufferlib = ["pufferlib-core"]
 gxm       = ["gxm"]
 pobax     = ["pobax"]
@@ -61,6 +63,7 @@ environments = [
     "craftax>=1.5.0",
     "popgym",
     "popgym-arcade>=0.0.4",
+    "continual-foragax",
     "warp-lang>=1.9.1",
     "playground>=0.0.5",
     "jaxmarl==0.1.0",
@@ -91,6 +94,7 @@ requires-dist = []
 
 
 [tool.uv.sources]
+continual-foragax = { git = "https://github.com/steventango/continual-foragax" }
 grimax  = { git = "ssh://git@github.com/noahfarr/grimax" }
 cogames = { git = "https://github.com/Metta-AI/cogames" }
 gxm     = { git = "https://github.com/huterguier/gxm", rev = "dev", extra = "gxm" }

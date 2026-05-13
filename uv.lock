@@ -444,6 +444,14 @@ wheels = [
 ]
 
 [[package]]
+name = "continual-foragax"
+version = "0.55.0"
+source = { git = "https://github.com/steventango/continual-foragax#105321af3b2faf8c16fb18c1f6255f61a7b81f6f" }
+dependencies = [
+    { name = "gymnax" },
+]
+
+[[package]]
 name = "contourpy"
 version = "1.3.3"
 source = { registry = "https://pypi.org/simple" }
@@ -1678,6 +1686,7 @@ craftax = [
 ]
 environments = [
     { name = "brax" },
+    { name = "continual-foragax" },
     { name = "craftax" },
     { name = "gxm" },
     { name = "gymnax" },
@@ -1691,6 +1700,9 @@ environments = [
     { name = "popjym" },
     { name = "warp-lang" },
     { name = "xminigrid" },
+]
+foragax = [
+    { name = "continual-foragax" },
 ]
 grimax = [
     { name = "grimax" },
@@ -1758,6 +1770,8 @@ requires-dist = [
     { name = "brax", marker = "extra == 'environments'", specifier = ">=0.12.4" },
     { name = "brax", marker = "extra == 'jaxmarl'" },
     { name = "cogames", marker = "extra == 'cogames'", git = "https://github.com/Metta-AI/cogames" },
+    { name = "continual-foragax", marker = "extra == 'environments'", git = "https://github.com/steventango/continual-foragax" },
+    { name = "continual-foragax", marker = "extra == 'foragax'", git = "https://github.com/steventango/continual-foragax" },
     { name = "craftax", marker = "extra == 'craftax'", specifier = ">=1.5.0" },
     { name = "craftax", marker = "extra == 'environments'", specifier = ">=1.5.0" },
     { name = "distrax", specifier = ">=0.1.5" },
@@ -1798,7 +1812,7 @@ requires-dist = [
     { name = "xminigrid", marker = "extra == 'environments'" },
     { name = "xminigrid", marker = "extra == 'xminigrid'" },
 ]
-provides-extras = ["brax", "jumanji", "navix", "craftax", "popgym", "popgym-arcade", "mujoco-playground", "grimax", "cogames", "gymnasium", "ale", "pufferlib", "gxm", "pobax", "popjym", "xminigrid", "jaxmarl", "environments"]
+provides-extras = ["brax", "jumanji", "navix", "craftax", "popgym", "foragax", "popgym-arcade", "mujoco-playground", "grimax", "cogames", "gymnasium", "ale", "pufferlib", "gxm", "pobax", "popjym", "xminigrid", "jaxmarl", "environments"]
 
 [package.metadata.requires-dev]
 development = [
