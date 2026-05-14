@@ -15,13 +15,23 @@ class GymnasiumState:
 
 class GymnasiumWrapper:
 
-    def __init__(self, environment):
-        self._environment = environment
-        self.num_envs = environment.num_envs
+    def __init__(self, environment, num_seeds: int = 1, num_envs: int = 1):
+        self.environment = environment
+        self.num_seeds = num_seeds
+        self.num_envs = num_envs
 
         observation_space = environment.single_observation_space
         self.observation_shape = observation_space.shape
         self.observation_dtype = jax.dtypes.canonicalize_dtype(observation_space.dtype)
+
+        action_space = environment.single_action_space
+        self.action_shape = action_space.shape
+        self.action_dtype = action_space.dtype
+
+        if num_seeds > 1:
+            self.batch_shape = (num_seeds, num_envs)
+        else:
+            self.batch_shape = (num_envs,)
 
     @property
     def default_params(self) -> None:
@@ -30,7 +40,10 @@ class GymnasiumWrapper:
     def reset(self, key: Key, params=None) -> tuple[Array, GymnasiumState]:
 
         def _reset(key):
-            observation, _ = self._environment.reset()
+            observation, _ = self.environment.reset()
+            observation = np.reshape(
+                observation, self.batch_shape + self.observation_shape
+            )
             return jnp.array(observation, dtype=self.observation_dtype)
 
         observation = jax.pure_callback(
@@ -52,15 +65,20 @@ class GymnasiumWrapper:
     ) -> tuple[Array, GymnasiumState, Array, Array, dict]:
 
         def _step(action):
-            action = np.asarray(action, dtype=self._environment.single_action_space.dtype)
+            action = np.reshape(action, (-1,) + self.action_shape)
+            action = np.asarray(action, dtype=self.action_dtype)
             observation, rewards, terminations, truncations, infos = (
-                self._environment.step(action)
+                self.environment.step(action)
             )
-
+            observation = np.reshape(
+                observation, self.batch_shape + self.observation_shape
+            )
+            rewards = np.reshape(rewards, self.batch_shape)
+            dones = np.reshape(terminations | truncations, self.batch_shape)
             return (
                 jnp.array(observation, dtype=self.observation_dtype),
                 jnp.array(rewards, dtype=jnp.float32),
-                jnp.array(terminations | truncations, dtype=jnp.bool_),
+                jnp.array(dones, dtype=jnp.bool_),
             )
 
         observation, rewards, dones = jax.pure_callback(
@@ -86,7 +104,7 @@ class GymnasiumWrapper:
         )
 
     def action_space(self, params=None):
-        action_space = self._environment.single_action_space
+        action_space = self.environment.single_action_space
         match action_space:
             case gym_spaces.Discrete(n=n):
                 return spaces.Discrete(int(n))
@@ -97,8 +115,13 @@ class GymnasiumWrapper:
         )
 
 
-def make(env_id, num_envs=1, **kwargs) -> tuple:
+def make(env_id, num_seeds: int = 1, num_envs: int = 1, **kwargs) -> tuple:
     import gymnasium
 
-    environment = gymnasium.make_vec(env_id, num_envs=num_envs, **kwargs)
-    return GymnasiumWrapper(environment), None
+    environment = gymnasium.make_vec(
+        env_id, num_envs=num_seeds * num_envs, **kwargs
+    )
+    return (
+        GymnasiumWrapper(environment, num_seeds=num_seeds, num_envs=num_envs),
+        None,
+    )
