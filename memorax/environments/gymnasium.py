@@ -1,3 +1,5 @@
+import warnings
+
 import gymnasium.spaces as gym_spaces
 import jax
 import jax.numpy as jnp
@@ -18,6 +20,16 @@ class GymnasiumWrapper:
     def __init__(self, environment, batch_shape: tuple[int, ...] = (1,)):
         self.environment = environment
         self.batch_shape = tuple(batch_shape)
+
+        if len(self.batch_shape) > 1:
+            warnings.warn(
+                f"GymnasiumWrapper batch_shape={self.batch_shape} treats leading "
+                "axes as seeds, but all envs share a single underlying vec env "
+                "and its RNG state, so sub-batches are not independently seeded. "
+                "Seed each sub-env explicitly at make-time if you need "
+                "independent seeds.",
+                stacklevel=2,
+            )
 
         observation_space = environment.single_observation_space
         self.observation_shape = observation_space.shape
