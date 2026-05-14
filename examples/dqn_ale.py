@@ -23,7 +23,7 @@ seed = 0
 num_envs = 16
 env_id = "breakout"
 
-env, env_params = make(env_id, num_envs=num_envs)
+env, env_params = make(env_id, batch_shape=(num_envs,))
 env = RecordEpisodeStatistics(env)
 
 num_actions = env.action_space(env_params).n

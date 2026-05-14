@@ -30,7 +30,7 @@ env, env_params = make(
     env_id,
     env_creator=pufferlib.emulation.GymnasiumPufferEnv,
     env_kwargs={"env_creator": lambda: gymnasium.make(env_id)},
-    num_envs=num_envs,
+    batch_shape=(num_envs,),
     backend=pufferlib.vector.Multiprocessing,
     num_workers=16,
 )

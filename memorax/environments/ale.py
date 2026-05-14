@@ -1,3 +1,5 @@
+import warnings
+
 import jax
 import jax.numpy as jnp
 import numpy as np
@@ -14,9 +16,19 @@ class ALEState:
 
 class ALEWrapper:
 
-    def __init__(self, environment):
-        self._environment = environment
-        self.num_envs = environment.num_envs
+    def __init__(self, environment, batch_shape: tuple[int, ...] = (1,)):
+        self.environment = environment
+        self.batch_shape = tuple(batch_shape)
+
+        if len(self.batch_shape) > 1:
+            warnings.warn(
+                f"ALEWrapper batch_shape={self.batch_shape} treats leading "
+                "axes as seeds, but all envs share a single underlying vec env "
+                "and its RNG state, so sub-batches are not independently seeded. "
+                "Seed each sub-env explicitly at make-time if you need "
+                "independent seeds.",
+                stacklevel=2,
+            )
 
         observation_space = environment.single_observation_space
         self.observation_shape = observation_space.shape
@@ -31,7 +43,10 @@ class ALEWrapper:
     def reset(self, key: Key, params=None) -> tuple[Array, ALEState]:
 
         def _reset(key):
-            observation, _ = self._environment.reset()
+            observation, _ = self.environment.reset()
+            observation = np.reshape(
+                observation, self.batch_shape + self.observation_shape
+            )
             return jnp.array(observation, dtype=self.observation_dtype)
 
         observation = jax.pure_callback(
@@ -53,15 +68,20 @@ class ALEWrapper:
     ) -> tuple[Array, ALEState, Array, Array, dict]:
 
         def _step(action):
+            action = np.reshape(action, (-1,))
             action = np.asarray(action, dtype=np.int32)
             observation, rewards, terminations, truncations, infos = (
-                self._environment.step(action)
+                self.environment.step(action)
             )
-
+            observation = np.reshape(
+                observation, self.batch_shape + self.observation_shape
+            )
+            rewards = np.reshape(rewards, self.batch_shape)
+            dones = np.reshape(terminations | truncations, self.batch_shape)
             return (
                 jnp.array(observation, dtype=self.observation_dtype),
                 jnp.array(rewards, dtype=jnp.float32),
-                jnp.array(terminations | truncations, dtype=jnp.bool_),
+                jnp.array(dones, dtype=jnp.bool_),
             )
 
         observation, rewards, dones = jax.pure_callback(
@@ -90,8 +110,9 @@ class ALEWrapper:
         return spaces.Discrete(self.num_actions)
 
 
-def make(env_id, num_envs=1, **kwargs) -> tuple:
+def make(env_id, batch_shape: tuple[int, ...] = (1,), **kwargs) -> tuple:
     from ale_py.vector_env import AtariVectorEnv
 
+    num_envs = int(np.prod(batch_shape))
     environment = AtariVectorEnv(game=env_id, num_envs=num_envs, **kwargs)
-    return ALEWrapper(environment), None
+    return ALEWrapper(environment, batch_shape=batch_shape), None
