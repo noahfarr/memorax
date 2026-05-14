@@ -15,10 +15,9 @@ class GymnasiumState:
 
 class GymnasiumWrapper:
 
-    def __init__(self, environment, num_seeds: int = 1, num_envs: int = 1):
+    def __init__(self, environment, batch_shape: tuple[int, ...] = (1,)):
         self.environment = environment
-        self.num_seeds = num_seeds
-        self.num_envs = num_envs
+        self.batch_shape = tuple(batch_shape)
 
         observation_space = environment.single_observation_space
         self.observation_shape = observation_space.shape
@@ -27,11 +26,6 @@ class GymnasiumWrapper:
         action_space = environment.single_action_space
         self.action_shape = action_space.shape
         self.action_dtype = action_space.dtype
-
-        if num_seeds > 1:
-            self.batch_shape = (num_seeds, num_envs)
-        else:
-            self.batch_shape = (num_envs,)
 
     @property
     def default_params(self) -> None:
@@ -115,13 +109,9 @@ class GymnasiumWrapper:
         )
 
 
-def make(env_id, num_seeds: int = 1, num_envs: int = 1, **kwargs) -> tuple:
+def make(env_id, batch_shape: tuple[int, ...] = (1,), **kwargs) -> tuple:
     import gymnasium
 
-    environment = gymnasium.make_vec(
-        env_id, num_envs=num_seeds * num_envs, **kwargs
-    )
-    return (
-        GymnasiumWrapper(environment, num_seeds=num_seeds, num_envs=num_envs),
-        None,
-    )
+    num_envs = int(np.prod(batch_shape))
+    environment = gymnasium.make_vec(env_id, num_envs=num_envs, **kwargs)
+    return GymnasiumWrapper(environment, batch_shape=batch_shape), None
