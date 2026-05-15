@@ -54,6 +54,7 @@ pobax     = ["pobax"]
 popjym    = ["popjym"]
 xminigrid = ["xminigrid"]
 jaxmarl   = ["jaxmarl", "brax"]
+memory-gym = ["memory-gym", "gymnasium"]
 
 environments = [
     "brax>=0.12.4",
@@ -63,6 +64,7 @@ environments = [
     "craftax>=1.5.0",
     "popgym",
     "popgym-arcade>=0.0.4",
+    "memory-gym",
     "continual-foragax",
     "warp-lang>=1.9.1",
     "playground>=0.0.5",
