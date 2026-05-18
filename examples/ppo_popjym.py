@@ -18,9 +18,10 @@ num_epochs = 150
 num_steps = total_timesteps // num_epochs
 seed = 0
 num_seeds = 1
-env_id = "popjym::CountRecallEasy"
+env_id = "popjym::CountRecall"
+difficulty = "Easy"
 
-env, env_params = environment.make(env_id)
+env, env_params = environment.make(env_id, difficulty=difficulty)
 env = RecordEpisodeStatistics(env)
 
 num_actions = env.action_space(env_params).n

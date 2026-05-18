@@ -76,9 +76,12 @@ class PopJymWrapper(GymnaxWrapper):
         return self._env.state_space(params.env_params)
 
 
-def make(env_id: str, **kwargs) -> tuple[PopJymWrapper, EnvParams]:
+def make(
+    env_id: str, difficulty: str, **kwargs
+) -> tuple[PopJymWrapper, EnvParams]:
     import popjym
 
+    env_id = f"{env_id}{difficulty}"
     env, env_params = popjym.make(env_id, **kwargs)
     env = PopJymWrapper(env)
     env_params = EnvParams(

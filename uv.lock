@@ -919,6 +919,26 @@ dependencies = [
 ]
 
 [[package]]
+name = "gym"
+version = "0.26.2"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "cloudpickle" },
+    { name = "gym-notices" },
+    { name = "numpy" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/ab/b1/eb05a423eb801ab7d0715d6a3b28d92589e30b437052553df19ca2087240/gym-0.26.2.tar.gz", hash = "sha256:e0d882f4b54f0c65f203104c24ab8a38b039f1289986803c7d02cdbe214fbcc4", size = 721689, upload-time = "2022-10-04T23:57:43.247Z" }
+
+[[package]]
+name = "gym-notices"
+version = "0.1.0"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/a2/4d/035922b950b224ee4b65a9a4550a22eac8985a3f0e1ef42546d9047e7a72/gym_notices-0.1.0.tar.gz", hash = "sha256:9f9477ef68a8c15e42625d4fa53631237e3e6ae947f325b5c149c081499adc1b", size = 3084, upload-time = "2025-07-27T10:12:41.534Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/41/55/55d157aa8693090954fc9639bf27218240517c3bc7afa6e97412da6ebfd9/gym_notices-0.1.0-py3-none-any.whl", hash = "sha256:a943af4446cb619d04fd1e470b9272b4473e08a06d1c7cc9005755a4a0b8c905", size = 3349, upload-time = "2025-07-27T10:12:40.039Z" },
+]
+
+[[package]]
 name = "gymnasium"
 version = "1.3.0"
 source = { registry = "https://pypi.org/simple" }
@@ -931,6 +951,13 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/4d/ff/14b6880d703dfaca204490979d3254ccd280c99550798993319902873658/gymnasium-1.3.0.tar.gz", hash = "sha256:6939e86e835d6b71b6ba6bfd360487420876deafc79bfb7bacba83a7c446bcf3", size = 830646, upload-time = "2026-04-22T13:47:14.155Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/e9/73/fda6a25f3beeb5e49d74330b44092b9e5a547395ccd478d1103ddcbff1fc/gymnasium-1.3.0-py3-none-any.whl", hash = "sha256:6b8c159a8540dcbcb221722d7efda24d78ebbcbc3bd2ea1c2611aa2a34471fc2", size = 953904, upload-time = "2026-04-22T13:47:12.13Z" },
+]
+
+[package.optional-dependencies]
+mujoco = [
+    { name = "imageio" },
+    { name = "mujoco" },
+    { name = "packaging" },
 ]
 
 [[package]]
@@ -1692,6 +1719,7 @@ environments = [
     { name = "gymnax" },
     { name = "jaxmarl" },
     { name = "jumanji" },
+    { name = "memory-gym" },
     { name = "navix" },
     { name = "playground" },
     { name = "pobax" },
@@ -1719,6 +1747,13 @@ jaxmarl = [
 ]
 jumanji = [
     { name = "jumanji" },
+]
+memory-gym = [
+    { name = "gymnasium" },
+    { name = "memory-gym" },
+]
+mujoco = [
+    { name = "gymnasium", extra = ["mujoco"] },
 ]
 mujoco-playground = [
     { name = "playground" },
@@ -1781,7 +1816,9 @@ requires-dist = [
     { name = "gxm", marker = "extra == 'environments'" },
     { name = "gxm", marker = "extra == 'gxm'", git = "https://github.com/huterguier/gxm?rev=dev" },
     { name = "gymnasium", marker = "extra == 'gymnasium'" },
+    { name = "gymnasium", marker = "extra == 'memory-gym'" },
     { name = "gymnasium", marker = "extra == 'popgym'" },
+    { name = "gymnasium", extras = ["mujoco"], marker = "extra == 'mujoco'" },
     { name = "gymnax", specifier = ">=0.0.9" },
     { name = "gymnax", marker = "extra == 'environments'", specifier = ">=0.0.9" },
     { name = "hydra-core" },
@@ -1792,6 +1829,8 @@ requires-dist = [
     { name = "jumanji", marker = "extra == 'environments'", specifier = ">=1.1.1" },
     { name = "jumanji", marker = "extra == 'jumanji'", specifier = ">=1.1.1" },
     { name = "lox", git = "https://github.com/huterguier/lox?rev=dev" },
+    { name = "memory-gym", marker = "extra == 'environments'" },
+    { name = "memory-gym", marker = "extra == 'memory-gym'" },
     { name = "navix", marker = "extra == 'environments'", specifier = ">=0.7.0" },
     { name = "navix", marker = "extra == 'navix'", specifier = ">=0.7.0" },
     { name = "playground", marker = "extra == 'environments'", specifier = ">=0.0.5" },
@@ -1812,7 +1851,7 @@ requires-dist = [
     { name = "xminigrid", marker = "extra == 'environments'" },
     { name = "xminigrid", marker = "extra == 'xminigrid'" },
 ]
-provides-extras = ["brax", "jumanji", "navix", "craftax", "popgym", "foragax", "popgym-arcade", "mujoco-playground", "grimax", "cogames", "gymnasium", "ale", "pufferlib", "gxm", "pobax", "popjym", "xminigrid", "jaxmarl", "environments"]
+provides-extras = ["brax", "jumanji", "navix", "craftax", "popgym", "foragax", "popgym-arcade", "mujoco-playground", "grimax", "cogames", "gymnasium", "ale", "mujoco", "pufferlib", "gxm", "pobax", "popjym", "xminigrid", "jaxmarl", "memory-gym", "environments"]
 
 [package.metadata.requires-dev]
 development = [
@@ -1828,6 +1867,19 @@ docs = [
     { name = "sphinx-book-theme", specifier = ">=1.1.0" },
     { name = "sphinx-copybutton", specifier = ">=0.5.2" },
     { name = "sphinx-design", specifier = ">=0.5.0" },
+]
+
+[[package]]
+name = "memory-gym"
+version = "0.3.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "gym" },
+    { name = "pygame" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/be/70/94792bb3f530c1069b3f8162f4c040af54c823ae14529fb3eefde7d3a140/memory-gym-0.3.0.tar.gz", hash = "sha256:bbff5a434b6f415382ad43295ecd76957f159f5a0db292bbd5eda41f45adaf44", size = 28764, upload-time = "2022-11-21T05:24:16.141Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/7e/91/c18732338c03874bca97133cbd8237f3f8ddf9f6a77494074bb9a7affa81/memory_gym-0.3.0-py3-none-any.whl", hash = "sha256:aeac8791a1e9f7be5e0757cdbab281dce54bb844ca0c653dbd8d311d7a48a5b6", size = 46580, upload-time = "2022-11-21T05:24:13.592Z" },
 ]
 
 [[package]]
